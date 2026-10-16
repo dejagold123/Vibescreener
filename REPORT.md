@@ -190,7 +190,7 @@ CMD ["python", "-m", "vibescreener", "follow"]
 ```
 
 ### Required Cloud Environment Variables
-- `VIBESCREENER_RPC`: `https://robinhood-testnet.g.alchemy.com/v2/alch_-bfPbKUYuWczb86Zrduxd`
+- `VIBESCREENER_RPC`: `https://robinhood-testnet.g.alchemy.com/v2/<YOUR_ALCHEMY_KEY>`
 - `VIBESCREENER_DB`: `/data/vibescreener.db` *(if using a persistent volume mount)*
 
 ---

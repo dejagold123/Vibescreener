@@ -23,39 +23,61 @@ CREATE INDEX IF NOT EXISTS trades_token ON trades(token, block);
 CREATE INDEX IF NOT EXISTS tokens_creator ON tokens(creator);
 
 -- Last trade price per token, in quote units per token (approximate: ignores fees).
-CREATE VIEW IF NOT EXISTS token_last_price AS
+DROP VIEW IF EXISTS token_last_price;
+CREATE VIEW token_last_price AS
 SELECT t.token, t.quote_amt / t.token_amt AS price
 FROM trades t
 JOIN (SELECT token, MAX(block * 100000 + log_index) AS k
       FROM trades WHERE token_amt > 0 GROUP BY token) m
   ON m.token = t.token AND (t.block * 100000 + t.log_index) = m.k;
 
+-- Views are dropped and recreated on every start so definition changes reach existing databases.
 -- One row per wallet and token. Amounts are in whole units of the token / of its quote token.
-CREATE VIEW IF NOT EXISTS wallet_token_pnl AS
+-- complete = 0 when the wallet sold more than it was seen buying: the buy happened before
+-- indexing began (or the tokens arrived by transfer), so the cost basis is missing.
+DROP VIEW IF EXISTS wallet_token_pnl;
+CREATE VIEW wallet_token_pnl AS
 SELECT tr.trader, tr.token, k.symbol, k.quote_token,
   SUM(CASE WHEN tr.side = 'buy'  THEN tr.token_amt ELSE 0 END) AS tokens_bought,
   SUM(CASE WHEN tr.side = 'sell' THEN tr.token_amt ELSE 0 END) AS tokens_sold,
   SUM(CASE WHEN tr.side = 'buy'  THEN tr.quote_amt ELSE 0 END) AS quote_spent,
   SUM(CASE WHEN tr.side = 'sell' THEN tr.quote_amt ELSE 0 END) AS quote_received,
   COUNT(*) AS trades,
-  p.price AS last_price
+  p.price AS last_price,
+  CASE WHEN SUM(CASE WHEN tr.side = 'sell' THEN tr.token_amt ELSE 0 END)
+          <= SUM(CASE WHEN tr.side = 'buy' THEN tr.token_amt ELSE 0 END) * 1.0001
+       THEN 1 ELSE 0 END AS complete
 FROM trades tr
 LEFT JOIN tokens k ON k.token = tr.token
 LEFT JOIN token_last_price p ON p.token = tr.token
 GROUP BY tr.trader, tr.token;
 
 -- Wallet PnL per quote token (mixing quote tokens would add unlike units).
+-- Only positions with a known quote token and a complete buy history are counted.
 -- Unrealized part values remaining tokens at the last trade price.
 -- Token transfers between wallets are not tracked, so treat this as an estimate.
-CREATE VIEW IF NOT EXISTS wallet_pnl AS
+DROP VIEW IF EXISTS wallet_pnl;
+CREATE VIEW wallet_pnl AS
 SELECT trader, quote_token,
   COUNT(DISTINCT token) AS tokens_traded, SUM(trades) AS trades,
   SUM(quote_spent) AS quote_spent, SUM(quote_received) AS quote_received,
   SUM(quote_received + MAX(tokens_bought - tokens_sold, 0) * COALESCE(last_price, 0)
       - quote_spent) AS pnl_quote
-FROM wallet_token_pnl GROUP BY trader, quote_token;
+FROM wallet_token_pnl
+WHERE complete = 1 AND quote_token IS NOT NULL
+GROUP BY trader, quote_token;
 
-CREATE VIEW IF NOT EXISTS token_stats AS
+-- How many wallet/token positions the PnL leaderboard leaves out, and why.
+DROP VIEW IF EXISTS pnl_excluded;
+CREATE VIEW pnl_excluded AS
+SELECT
+  SUM(CASE WHEN complete = 0 THEN 1 ELSE 0 END) AS incomplete_history,
+  SUM(CASE WHEN complete = 1 AND quote_token IS NULL THEN 1 ELSE 0 END) AS unknown_quote,
+  COUNT(*) AS total_positions
+FROM wallet_token_pnl;
+
+DROP VIEW IF EXISTS token_stats;
+CREATE VIEW token_stats AS
 SELECT k.token, k.symbol, k.name, k.creator, k.quote_token, k.ts AS launched_ts,
   COUNT(t.tx) AS trades, COUNT(DISTINCT t.trader) AS traders,
   COALESCE(SUM(t.quote_amt), 0) AS volume_quote, p.price AS last_price
@@ -64,7 +86,8 @@ LEFT JOIN trades t ON t.token = k.token
 LEFT JOIN token_last_price p ON p.token = k.token
 GROUP BY k.token;
 
-CREATE VIEW IF NOT EXISTS creator_stats AS
+DROP VIEW IF EXISTS creator_stats;
+CREATE VIEW creator_stats AS
 SELECT k.creator, COUNT(DISTINCT k.token) AS tokens_launched,
   COUNT(t.tx) AS trades, COUNT(DISTINCT t.trader) AS unique_traders
 FROM tokens k LEFT JOIN trades t ON t.token = k.token

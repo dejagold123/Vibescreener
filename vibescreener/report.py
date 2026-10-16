@@ -51,6 +51,9 @@ def print_report(db, top=15, hours=24):
     for r in leaderboard_wallets(db, top):
         print(f"  {short(r['trader'])}  {qlabel(r['quote_token']):>13}  pnl {r['pnl_quote']:>14.6f}  "
               f"spent {r['quote_spent']:>12.6f}  trades {r['trades']:>4}  tokens {r['tokens_traded']}")
+    ex = db.q("SELECT * FROM pnl_excluded")[0]
+    print(f"  (left out: {ex['incomplete_history'] or 0} positions with missing buy history, "
+          f"{ex['unknown_quote'] or 0} with unknown quote token, of {ex['total_positions'] or 0} total)")
     print(f"\nTRENDING TOKENS (last {hours}h, by unique traders)")
     for r in trending_tokens(db, hours, top):
         print(f"  {(r['symbol'] or short(r['token'])):>10}  traders {r['traders']:>4}  trades {r['trades']:>4}  "

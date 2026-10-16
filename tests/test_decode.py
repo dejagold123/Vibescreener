@@ -199,16 +199,60 @@ class PipelineTests(unittest.TestCase):
         self.idx.ingest(ALL_LOGS)
         self.assertEqual(self.db.q("SELECT COUNT(*) n FROM trades")[0]["n"], 3)
 
-        # views run and group sensibly: JHJ (VIBEVIBE-quoted) and BTX (launch not indexed -> NULL quote)
+        # PnL counts only JHJ (known VIBEVIBE quote). BTX's launch was never indexed, so its
+        # quote token is unknown and its position is reported as excluded rather than guessed.
         pnl = {r["quote_token"]: r for r in self.db.q("SELECT * FROM wallet_pnl")}
-        self.assertEqual(set(pnl), {cfg.VIBEVIBE_TOKEN, None})
-        self.assertEqual(pnl[None]["trades"], 2)               # BTX buy + sell
-        self.assertGreater(pnl[None]["quote_received"], 0)
+        self.assertEqual(set(pnl), {cfg.VIBEVIBE_TOKEN})
+        ex = self.db.q("SELECT * FROM pnl_excluded")[0]
+        self.assertEqual((ex["unknown_quote"], ex["incomplete_history"], ex["total_positions"]), (1, 0, 2))
         self.assertEqual(self.db.q("SELECT creator, tokens_launched, unique_traders FROM creator_stats"),
                          [{"creator": TRADER, "tokens_launched": 1, "unique_traders": 1}])
         stats = self.db.q("SELECT symbol, trades, last_price FROM token_stats")
         self.assertEqual(stats[0]["symbol"], "JHJ")
         self.assertGreater(stats[0]["last_price"], 0)
+
+
+class PnlHonestyTests(unittest.TestCase):
+    """A leaderboard must not show a profit it cannot support."""
+
+    def make(self, logs):
+        db = DB(":memory:")
+        Indexer(FakeRpc(), db, log=lambda *_: None).ingest(logs)
+        return db
+
+    def test_sell_without_seen_buy_is_excluded(self):
+        # Indexing started after the buy: only the sell is visible. Its proceeds
+        # must not be reported as pure profit.
+        db = self.make([SELL_CURVE, SELL_ROUTER])
+        self.assertEqual(db.q("SELECT * FROM wallet_pnl"), [])
+        ex = db.q("SELECT * FROM pnl_excluded")[0]
+        self.assertEqual((ex["incomplete_history"], ex["total_positions"]), (1, 1))
+
+    def test_unknown_quote_is_excluded(self):
+        # BTX's launch was never indexed, so its quote token is unknown and its
+        # amounts cannot be added to any known quote token.
+        db = self.make([BTX_BUY_CURVE, BTX_BUY_ROUTER])
+        self.assertEqual(db.q("SELECT * FROM wallet_pnl"), [])
+        ex = db.q("SELECT * FROM pnl_excluded")[0]
+        self.assertEqual((ex["unknown_quote"], ex["incomplete_history"]), (1, 0))
+
+    def test_complete_known_quote_position_is_counted(self):
+        db = self.make([LAUNCH, LAUNCH_ROUTER, JHJ_BUY_CURVE, JHJ_BUY_ROUTER])
+        rows = db.q("SELECT * FROM wallet_pnl")
+        self.assertEqual([r["quote_token"] for r in rows], [cfg.VIBEVIBE_TOKEN])
+        self.assertAlmostEqual(rows[0]["quote_spent"], 2.124404990622015766)
+
+    def test_views_are_replaced_in_an_existing_database(self):
+        # Simulates upgrading a database created by an older version.
+        import os, tempfile
+        path = os.path.join(tempfile.mkdtemp(), "old.db")
+        old = sqlite3.connect(path)
+        old.executescript("CREATE VIEW wallet_pnl AS SELECT 1 AS stale;")
+        old.close()
+        db = DB(path)
+        cols = [r[1] for r in db.conn.execute("PRAGMA table_info(wallet_pnl)")]
+        self.assertIn("pnl_quote", cols)
+        self.assertNotIn("stale", cols)
 
 
 if __name__ == "__main__":
