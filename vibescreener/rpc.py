@@ -1,4 +1,5 @@
 """Minimal JSON-RPC client with retries and eth_getLogs helpers."""
+import re
 import time
 
 import requests
@@ -9,8 +10,18 @@ RANGE_HINTS = ("range", "limit", "too many", "exceed", "more than", "response si
                "10000", "timeout", "timed out")
 
 
+_KEY_IN_URL = re.compile(r"(/v2/)[A-Za-z0-9_\-]{6,}")
+
+
+def redact(text):
+    """Hide API keys that appear in URLs (requests puts the full URL in its errors),
+    so they never reach logs such as Railway's."""
+    return _KEY_IN_URL.sub(r"\1***", str(text))
+
+
 class RpcError(Exception):
-    pass
+    def __init__(self, message=""):
+        super().__init__(redact(message))
 
 
 class RangeTooLarge(RpcError):

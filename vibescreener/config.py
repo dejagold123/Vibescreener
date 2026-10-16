@@ -3,13 +3,68 @@
 Everything here was derived from decoded transactions on the explorer, because
 the vibe/vibe contracts are not verified. Event layouts are documented in
 decode.py.
+
+Settings come from environment variables, so on Railway (or any host) you add
+them in the service's Variables tab instead of editing code:
+
+    ALCHEMY_API_KEY     just the key; the RPC URL is built from it (simplest)
+    VIBESCREENER_RPC    a full RPC URL; wins over ALCHEMY_API_KEY
+    VIBESCREENER_DB     database file path; wins over the Railway volume path
+    VIBESCREENER_POLL   seconds between polls in follow/run mode (default 3)
 """
 import os
 
 CHAIN_ID = 46630
-RPC_URL = os.environ.get("VIBESCREENER_RPC", "https://rpc.testnet.chain.robinhood.com")
+PUBLIC_RPC = "https://rpc.testnet.chain.robinhood.com"
+ALCHEMY_RPC = "https://robinhood-testnet.g.alchemy.com/v2/{key}"
 EXPLORER = "https://explorer.testnet.chain.robinhood.com"
-DB_PATH = os.environ.get("VIBESCREENER_DB", "vibescreener.db")
+
+
+def _clean(value):
+    """Env values pasted into dashboards often carry stray spaces, newlines or quotes."""
+    return (value or "").strip().strip("'\"").strip()
+
+
+def resolve_rpc_url(env=None):
+    env = os.environ if env is None else env
+    full = _clean(env.get("VIBESCREENER_RPC"))
+    if full:
+        return full
+    key = _clean(env.get("ALCHEMY_API_KEY"))
+    if key:
+        return ALCHEMY_RPC.format(key=key)
+    return PUBLIC_RPC
+
+
+def resolve_db_path(env=None):
+    env = os.environ if env is None else env
+    explicit = _clean(env.get("VIBESCREENER_DB"))
+    if explicit:
+        return explicit
+    # Railway sets this itself when a volume is attached to the service.
+    mount = _clean(env.get("RAILWAY_VOLUME_MOUNT_PATH"))
+    if mount:
+        return os.path.join(mount, "vibescreener.db")
+    return "vibescreener.db"
+
+
+def on_railway_without_storage(env=None):
+    """True when running on Railway with nowhere persistent to keep the database."""
+    env = os.environ if env is None else env
+    return bool(env.get("RAILWAY_ENVIRONMENT_NAME") or env.get("RAILWAY_SERVICE_NAME")) and not (
+        _clean(env.get("VIBESCREENER_DB")) or _clean(env.get("RAILWAY_VOLUME_MOUNT_PATH")))
+
+
+def poll_seconds(env=None):
+    env = os.environ if env is None else env
+    try:
+        return max(0.5, float(_clean(env.get("VIBESCREENER_POLL")) or 3.0))
+    except ValueError:
+        return 3.0
+
+
+RPC_URL = resolve_rpc_url()
+DB_PATH = resolve_db_path()
 
 # Contracts (lower-case)
 FACTORY = "0xe794217880011f9ca6961340ed5c16ec9559fea0"  # emits one event per token launch

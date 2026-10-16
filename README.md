@@ -13,8 +13,10 @@ python -m unittest discover -s tests          # decoder checks against 3 real tr
 python -m vibescreener tx 0xd937397adb0922bf0803160fa1907d54fffff4645c26e3454f4307c49717a978
 
 # 2. index history, then keep following the chain
-python -m vibescreener backfill                # from the factory deploy block (looked up via the explorer)
+python -m vibescreener launches                # every past token launch (names, quote tokens) via the explorer; resumable
+python -m vibescreener backfill                # trades from the factory deploy block (looked up via the explorer)
 python -m vibescreener follow
+python -m vibescreener run                     # what a server runs: launches once, then follow forever
 
 # 3. look at the data
 python -m vibescreener report
@@ -22,8 +24,19 @@ python -m vibescreener quotes                  # which quote tokens exist; shows
 python -m vibescreener export --out vibescreener.json   # feed for the dashboard
 ```
 
-Options: `--rpc <url>` (or env `VIBESCREENER_RPC`) to use your Alchemy endpoint, `--db <file>`.
+Options: `--rpc <url>` to use your own node, `--db <file>`.
 `backfill --from-block N` skips the explorer lookup. The chunk size adapts to what the node allows.
+
+## Settings (environment variables)
+
+| Variable | Meaning |
+|---|---|
+| `ALCHEMY_API_KEY` | just your key; the Alchemy RPC URL is built from it |
+| `VIBESCREENER_RPC` | a full RPC URL (overrides `ALCHEMY_API_KEY`) |
+| `VIBESCREENER_DB` | database file path (default: the Railway volume if attached, else `./vibescreener.db`) |
+| `VIBESCREENER_POLL` | seconds between polls in `follow` / `run` (default 3) |
+
+Never commit keys to the repo. Deploying: see [DEPLOY.md](DEPLOY.md).
 
 ## What it reads
 
@@ -49,4 +62,6 @@ Layouts are documented at the top of `vibescreener/decode.py`.
   the quote amount is VIBEVIBE and not ETH.
 - PnL is per quote token (ETH vs VIBEVIBE are never added together). Token transfers between
   wallets are not tracked, and prices ignore fees, so treat PnL as an estimate.
-- Launches before the factory block you backfill from are missing, so their tokens show an unknown quote token.
+- Trades are only indexed from where you start. PnL counts only positions whose buys were seen and
+  whose quote token is known; the report prints how many positions it left out. Run `launches` so every
+  token's quote token is known.

@@ -7,6 +7,7 @@ from . import config as cfg
 from . import report
 from .db import DB
 from .decode import decode_curve, decode_launch, decode_router, pair_trades
+from .explorer import Explorer, ExplorerError, backfill_launches
 from .indexer import Indexer
 from .rpc import Rpc
 
@@ -40,6 +41,23 @@ def cmd_tx(rpc, db, args):
         print(idx.ingest(logs))
 
 
+def run_service(rpc, db, poll=3.0, explorer=None, log=print):
+    """What a hosted service runs: fill in token launches once, then follow the chain.
+    A failing explorer must not stop indexing, so launches are retried on the next start."""
+    if cfg.on_railway_without_storage():
+        log("WARNING: no volume attached and VIBESCREENER_DB is not set, so the database lives in "
+            "the container and is wiped on every redeploy. Add a volume (see DEPLOY.md).")
+    log(f"database: {cfg.DB_PATH}")
+    log("rpc: " + ("alchemy" if "alchemy" in cfg.RPC_URL else "custom/public") + " endpoint")
+    try:
+        res = backfill_launches(explorer or Explorer(), db, log=log)
+        if res["pages"]:
+            log(f"launch backfill finished: {res['launches']} launches")
+    except (ExplorerError, requests.RequestException) as e:
+        log(f"launch backfill paused ({e}); it resumes on the next start")
+    Indexer(rpc, db, log=log).follow(poll=poll)
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="vibescreener", description="vibe/vibe testnet indexer")
     p.add_argument("--db", default=cfg.DB_PATH)
@@ -52,7 +70,14 @@ def main(argv=None):
     b.add_argument("--chunk", type=int, default=5000, help="initial blocks per query (auto-adjusts)")
 
     f = sub.add_parser("follow", help="keep indexing new blocks")
-    f.add_argument("--poll", type=float, default=3.0)
+    f.add_argument("--poll", type=float, default=cfg.poll_seconds())
+
+    l = sub.add_parser("launches", help="backfill every token launch from the explorer (resumable)")
+    l.add_argument("--max-pages", type=int, default=None, help="stop after N pages (for a quick test)")
+    l.add_argument("--restart", action="store_true", help="forget progress and crawl again")
+
+    n = sub.add_parser("run", help="deployment entrypoint: backfill launches once, then follow forever")
+    n.add_argument("--poll", type=float, default=cfg.poll_seconds())
 
     t = sub.add_parser("tx", help="decode one transaction (use to verify the decoder)")
     t.add_argument("hash")
@@ -79,6 +104,10 @@ def main(argv=None):
         print(Indexer(rpc, db).backfill(start, end, chunk=args.chunk))
     elif args.cmd == "follow":
         Indexer(rpc, db).follow(poll=args.poll)
+    elif args.cmd == "launches":
+        print(backfill_launches(Explorer(), db, max_pages=args.max_pages, restart=args.restart))
+    elif args.cmd == "run":
+        run_service(rpc, db, poll=args.poll)
     elif args.cmd == "tx":
         cmd_tx(rpc, db, args)
     elif args.cmd == "report":

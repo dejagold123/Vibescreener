@@ -97,6 +97,8 @@ the environment again) to run `report`.
 | `python -m vibescreener tx <hash>` | Decode one transaction (add `--save` to store it) |
 | `python -m vibescreener backfill --from-block N` | Index from block N to the latest |
 | `python -m vibescreener follow` | Keep indexing new blocks |
+| `python -m vibescreener launches` | Fetch every past token launch from the explorer (resumable) |
+| `python -m vibescreener run` | Launches once, then follow forever (what a server runs) |
 | `python -m vibescreener report` | Print leaderboards |
 | `python -m vibescreener quotes` | List quote tokens seen |
 | `python -m vibescreener export --out vibescreener.json` | Write leaderboards to JSON for a dashboard |

@@ -2,6 +2,7 @@
 amounts overflow SQLite's 64-bit ints); *_amt columns are float copies in whole
 units (value / 1e18) used by the analytics views."""
 import json
+import os
 import sqlite3
 
 from . import config as cfg
@@ -104,7 +105,11 @@ def _s(x):
 
 
 class DB:
-    def __init__(self, path=cfg.DB_PATH):
+    def __init__(self, path=None):
+        path = path or cfg.DB_PATH
+        folder = os.path.dirname(path)
+        if path != ":memory:" and folder:
+            os.makedirs(folder, exist_ok=True)
         self.conn = sqlite3.connect(path)
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(SCHEMA)
