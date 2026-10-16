@@ -30,10 +30,23 @@ class Rpc:
                 r = self.s.post(self.url, json=payload, timeout=self.timeout)
                 if r.status_code in (429, 502, 503, 504):
                     raise RpcError(f"http {r.status_code}")
+                if r.status_code == 400:
+                    # Alchemy (and some other nodes) return 400 with a JSON
+                    # error body when the block range is too large rather than
+                    # a retryable 429.  Detect that case so the backfill loop
+                    # can halve the chunk size instead of giving up.
+                    try:
+                        msg = str(r.json().get("error", {}).get("message", "")).lower()
+                    except ValueError:
+                        msg = r.text.lower()
+                    if any(h in msg for h in RANGE_HINTS) or "block range" in msg or "tier" in msg:
+                        raise RangeTooLarge(f"400 range too large: {msg[:120]}")
                 r.raise_for_status()
                 return r.json()
             except requests.Timeout as e:
                 last = e
+            except RangeTooLarge:
+                raise  # don't retry; let backfill halve the chunk
             except (requests.RequestException, ValueError, RpcError) as e:
                 last = e
             time.sleep(min(2 ** attempt, 10))
