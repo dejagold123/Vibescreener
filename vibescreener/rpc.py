@@ -24,6 +24,10 @@ class RpcError(Exception):
         super().__init__(redact(message))
 
 
+class RpcAuthError(RpcError):
+    """The node rejected our credentials (401/403). Retrying cannot help."""
+
+
 class RangeTooLarge(RpcError):
     """The node refused the query because the block range / result was too big."""
 
@@ -52,12 +56,14 @@ class Rpc:
                         msg = r.text.lower()
                     if any(h in msg for h in RANGE_HINTS) or "block range" in msg or "tier" in msg:
                         raise RangeTooLarge(f"400 range too large: {msg[:120]}")
+                if r.status_code in (401, 403):
+                    raise RpcAuthError(f"http {r.status_code}: the node rejected the API key")
                 r.raise_for_status()
                 return r.json()
             except requests.Timeout as e:
                 last = e
-            except RangeTooLarge:
-                raise  # don't retry; let backfill halve the chunk
+            except (RangeTooLarge, RpcAuthError):
+                raise  # don't retry; let backfill halve the chunk / surface the bad key
             except (requests.RequestException, ValueError, RpcError) as e:
                 last = e
             time.sleep(min(2 ** attempt, 10))

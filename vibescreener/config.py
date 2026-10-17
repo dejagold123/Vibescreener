@@ -32,6 +32,10 @@ def resolve_rpc_url(env=None):
     if full:
         return full
     key = _clean(env.get("ALCHEMY_API_KEY"))
+    if key.lower().startswith("http"):
+        return key.rstrip("/")            # a whole URL was pasted into the key variable
+    if "/v2/" in key:
+        key = key.split("/v2/")[-1].strip("/")
     if key:
         return ALCHEMY_RPC.format(key=key)
     return PUBLIC_RPC

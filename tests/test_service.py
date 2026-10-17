@@ -293,3 +293,39 @@ class RunServiceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BadKeyTests(unittest.TestCase):
+    def test_full_url_pasted_into_key_variable_works(self):
+        url = "https://robinhood-testnet.g.alchemy.com/v2/abc123"
+        self.assertEqual(cfg.resolve_rpc_url({"ALCHEMY_API_KEY": url}), url)
+        self.assertEqual(cfg.resolve_rpc_url({"ALCHEMY_API_KEY": url + "/"}), url)
+        self.assertEqual(cfg.resolve_rpc_url({"ALCHEMY_API_KEY": "/v2/abc123"}), url)
+
+    def test_401_is_not_retried_and_says_why(self):
+        from vibescreener.rpc import RpcAuthError
+        rpc = Rpc(ALCHEMY_URL, retries=4)
+        resp = mock.Mock(status_code=401)
+        with mock.patch.object(rpc.s, "post", return_value=resp) as post, mock.patch("time.sleep"):
+            with self.assertRaises(RpcAuthError) as cm:
+                rpc.block_number()
+        self.assertEqual(post.call_count, 1)
+        self.assertNotIn(SECRET, str(cm.exception))
+
+    def test_bad_key_falls_back_to_public_rpc_and_says_so(self):
+        from vibescreener.rpc import RpcAuthError
+
+        class Rejecting(FakeNodeRpc):
+            url = ALCHEMY_URL
+
+            def block_number(self):
+                raise RpcAuthError("http 401")
+
+        rpc, lines = Rejecting(), []
+        done = mock.Mock()
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(cli, "backfill_launches",
+                return_value={"pages": 0, "launches": 0}), mock.patch.object(Indexer, "follow"):
+            cli.run_service(rpc, DB(os.path.join(d, "x.db")), explorer=done, log=lines.append)
+        self.assertEqual(rpc.url, cfg.PUBLIC_RPC)
+        self.assertTrue(any("rejected the API key" in l for l in lines))
+        self.assertFalse(any(SECRET in l for l in lines))

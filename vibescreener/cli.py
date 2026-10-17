@@ -9,7 +9,7 @@ from .db import DB
 from .decode import decode_curve, decode_launch, decode_router, pair_trades
 from .explorer import Explorer, ExplorerError, backfill_launches
 from .indexer import Indexer
-from .rpc import Rpc
+from .rpc import Rpc, RpcAuthError
 from . import web
 
 
@@ -52,6 +52,16 @@ def run_service(rpc, db, poll=3.0, explorer=None, log=print, serve_web=False, db
     if serve_web:
         web.start_background(db_path or cfg.DB_PATH, cfg.web_port(), log=log)
     log("rpc: " + ("alchemy" if "alchemy" in cfg.RPC_URL else "custom/public") + " endpoint")
+    try:
+        rpc.block_number()
+    except RpcAuthError:
+        if getattr(rpc, "url", cfg.PUBLIC_RPC) != cfg.PUBLIC_RPC:
+            log("ERROR: the RPC provider rejected the API key (401). Check ALCHEMY_API_KEY: it must be "
+                "an active key for an app on Robinhood Chain Testnet, with no spaces. "
+                "Using the public RPC until that is fixed; it is slower and rate-limited.")
+            rpc.url = cfg.PUBLIC_RPC
+    except Exception:
+        pass  # a temporary network problem; follow() retries on its own
     try:
         res = backfill_launches(explorer or Explorer(), db, log=log)
         if res["pages"]:
