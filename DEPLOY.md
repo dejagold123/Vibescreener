@@ -64,6 +64,14 @@ blocks 136700010-136700018: +0 launches, +2 trades (total 0/2)
 - `rpc error, retrying in 10s` is a temporary network problem; the service retries by itself.
   API keys are always masked in logs as `/v2/***`.
 
+## 6. Open the dashboard
+
+The service also serves the dashboard and a JSON API on the port Railway provides (`PORT`).
+To get a public address: open the service → **Settings** → **Networking** → **Generate Domain**.
+Open that link to see the dashboard. The JSON API lives under `/api/` (for example `/api/overview`,
+`/api/trending`, `/api/wallets`, `/api/creators`, `/api/feed`, `/api/token/<address>`,
+`/api/wallet/<address>`). `/health` returns `ok`. It is read-only; nothing on it can change data.
+
 ## Things to know
 
 - **RPC usage.** The chain makes roughly 8-10 blocks per second. On Alchemy's free plan,
@@ -74,6 +82,7 @@ blocks 136700010-136700018: +0 launches, +2 trades (total 0/2)
 - **History.** Token launches are backfilled from the explorer. Trades are indexed only
   from the moment the service starts, so wallet PnL only counts positions whose buys were
   seen. Positions with missing history are left out and the report says how many.
-- **Seeing results.** The service only indexes. To view leaderboards you need to run
-  `python -m vibescreener report` somewhere that can read the database file. A small web
-  page or API on top of it is the natural next step.
+- **Seeing results.** Use the dashboard (step 6). The terminal `report` command still works
+  wherever the database file can be read.
+- **Public once you generate a domain.** The dashboard has no login. It shows only
+  on-chain data, but anyone with the link can open it.

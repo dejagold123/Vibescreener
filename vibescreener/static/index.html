@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VibeScreener</title>
+<style>
+:root{--bg:#f7f6f3;--card:#fff;--text:#1c1c1a;--muted:#6b6a65;--line:#e4e2db;--up:#1a7f4b;--down:#c0392b;--accent:#2f5fd0}
+@media (prefers-color-scheme:dark){:root{--bg:#161615;--card:#1f1f1d;--text:#ecebe6;--muted:#9a988f;--line:#33332f;--up:#4cc38a;--down:#ef6b5c;--accent:#7aa2ff}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+.wrap{max-width:1100px;margin:0 auto;padding:16px}
+header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+.brand{font-weight:600;font-size:18px;color:var(--text)}
+.pill{font-size:11px;padding:2px 8px;border-radius:8px;margin-left:8px;background:var(--line);color:var(--muted)}
+.pill.live{background:rgba(26,127,75,.15);color:var(--up)}.pill.stale{background:rgba(192,57,43,.15);color:var(--down)}
+select{background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:4px 8px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px}
+.stat,.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px}
+.stat .l{color:var(--muted);font-size:12px}.stat .v{font-size:22px;font-weight:600}
+.grid{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:12px;margin-bottom:12px}
+@media(max-width:800px){.grid{grid-template-columns:minmax(0,1fr)}}
+h2{font-size:14px;margin:0 0 8px;font-weight:600}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{color:var(--muted);font-weight:400;text-align:left;padding:4px 6px 4px 0}
+td{padding:6px 6px 6px 0;border-top:1px solid var(--line)}
+.r{text-align:right}.mut{color:var(--muted)}.up{color:var(--up)}.down{color:var(--down)}
+.note{color:var(--muted);font-size:12px;margin-top:8px}
+.scroll{overflow-x:auto}
+.row{display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-top:1px solid var(--line)}
+svg.chart{width:100%;height:160px}
+nav a{margin-left:14px;color:var(--muted)}nav a.on{color:var(--text);font-weight:600}
+.empty{color:var(--muted);padding:12px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div><a class="brand" href="#/">VibeScreener</a><span id="live" class="pill">connecting</span></div>
+  <nav><a href="#/" id="nav-home">Overview</a><a href="#/creators" id="nav-creators">Creators</a>
+  <select id="hours" aria-label="Time window"><option value="1">1h</option><option value="6">6h</option><option value="24" selected>24h</option><option value="168">7d</option></select></nav>
+</header>
+<main id="app"></main>
+<p class="note">Testnet data, indexed on-chain only. PnL is an estimate: positions bought before indexing began are left out, and ETH and VIBEVIBE amounts are never added together.</p>
+</div>
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const short=a=>a?a.slice(0,6)+"…"+a.slice(-4):"";
+const fmt=(n,d=4)=>n==null?"–":Number(n).toLocaleString(undefined,{maximumFractionDigits:Math.abs(n)>=100?1:d});
+const ago=ts=>{if(!ts)return"–";const s=Math.max(0,Math.floor(Date.now()/1000-ts));return s<60?s+"s ago":s<3600?Math.floor(s/60)+"m ago":s<86400?Math.floor(s/3600)+"h ago":Math.floor(s/86400)+"d ago"};
+const tokLink=(t,sym)=>`<a href="#/token/${esc(t)}">${esc(sym||short(t))}</a>`;
+const walLink=w=>`<a href="#/wallet/${esc(w)}">${esc(short(w))}</a>`;
+const pnl=(v,q)=>v==null?"–":`<span class="${v>=0?"up":"down"}">${v>=0?"+":""}${fmt(v)} ${esc(q||"")}</span>`;
+const hours=()=>$("#hours").value;
+async function api(p){const r=await fetch(p);if(!r.ok)throw new Error((await r.json().catch(()=>({}))).error||r.status);return r.json()}
+let timer=null;
+function setLive(ov){const el=$("#live");if(!ov||!ov.last_trade_ts){el.className="pill";el.textContent="no trades yet";return}
+ const age=ov.now-ov.last_trade_ts;el.className="pill "+(age<600?"live":"stale");el.textContent=age<600?"live":"last trade "+ago(ov.last_trade_ts)}
+function feedRows(items){return items.length?items.map(i=>i.kind==="launch"
+ ?`<div class="row"><span><span class="mut">NEW</span> ${tokLink(i.token,i.symbol)} by ${walLink(i.trader)}</span><span class="mut">${ago(i.ts)}</span></div>`
+ :`<div class="row"><span><span class="${i.side==="buy"?"up":"down"}">${esc(i.side).toUpperCase()}</span> ${tokLink(i.token,i.symbol)} · ${walLink(i.trader)}</span><span class="mut">${fmt(i.amount)} ${esc(i.quote)} · ${ago(i.ts)}</span></div>`).join("")
+ :`<div class="empty">No activity yet.</div>`}
+async function home(){
+ const h=hours();
+ const [ov,tr,wl,fd]=await Promise.all([api("/api/overview?hours="+h),api("/api/trending?limit=15&hours="+h),api("/api/wallets?limit=10"),api("/api/feed?limit=25")]);
+ setLive(ov);
+ const vol=ov.volume_window.map(v=>`${fmt(v.volume,2)} ${esc(v.quote==="unknown-quote"?"?":v.quote)}`).join(" · ")||"–";
+ const ex=ov.pnl_excluded;
+ $("#app").innerHTML=`
+ <div class="stats">
+  <div class="stat"><div class="l">Tokens launched</div><div class="v">${ov.tokens.toLocaleString()}</div></div>
+  <div class="stat"><div class="l">Trades (${h}h)</div><div class="v">${ov.trades_window.toLocaleString()}</div></div>
+  <div class="stat"><div class="l">Active wallets (${h}h)</div><div class="v">${ov.wallets_window.toLocaleString()}</div></div>
+  <div class="stat"><div class="l">Volume (${h}h)</div><div class="v" style="font-size:16px">${vol}</div></div>
+ </div>
+ <div class="grid">
+  <div class="card"><h2>Trending tokens</h2><div class="scroll"><table><tr><th>Token</th><th>Quote</th><th class="r">Trades</th><th class="r">Traders</th><th class="r">Volume</th></tr>
+  ${tr.length?tr.map(t=>`<tr><td>${tokLink(t.token,t.symbol)}</td><td class="mut">${esc(t.quote)}</td><td class="r">${t.trades}</td><td class="r">${t.traders}</td><td class="r">${fmt(t.volume_quote,3)}</td></tr>`).join(""):`<tr><td colspan="5" class="empty">No trades in this window yet.</td></tr>`}</table></div></div>
+  <div class="card"><h2>Top wallets by estimated PnL</h2>
+  ${wl.length?wl.map(w=>`<div class="row"><span>${walLink(w.trader)} <span class="mut">${w.tokens_traded} tokens</span></span>${pnl(w.pnl_quote,w.quote)}</div>`).join(""):`<div class="empty">No complete positions yet.</div>`}
+  <div class="note">Left out: ${ex.incomplete_history} positions with missing buy history, ${ex.unknown_quote} with unknown quote token, of ${ex.total_positions} total.</div></div>
+ </div>
+ <div class="card"><h2>Live feed</h2>${feedRows(fd)}</div>`;
+}
+async function creatorsPage(){
+ const c=await api("/api/creators?limit=50");
+ $("#app").innerHTML=`<div class="card"><h2>Top creators</h2><div class="scroll"><table><tr><th>Creator</th><th class="r">Tokens</th><th class="r">Unique traders</th><th class="r">Trades</th></tr>
+ ${c.map(r=>`<tr><td>${walLink(r.creator)}</td><td class="r">${r.tokens_launched}</td><td class="r">${r.unique_traders}</td><td class="r">${r.trades}</td></tr>`).join("")}</table></div>
+ <div class="note">Ranked by unique traders across everything they launched.</div></div>`;
+}
+function chart(series){
+ if(series.length<2)return`<div class="empty">Not enough trades for a chart yet.</div>`;
+ const ys=series.map(p=>p.price),lo=Math.min(...ys),hi=Math.max(...ys),sp=hi-lo||hi||1,W=600,H=150;
+ const pts=series.map((p,i)=>`${(i/(series.length-1)*W).toFixed(1)},${(H-(p.price-lo)/sp*(H-10)-5).toFixed(1)}`).join(" ");
+ return`<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Price per trade"><polyline fill="none" stroke="var(--accent)" stroke-width="2" vector-effect="non-scaling-stroke" points="${pts}"/></svg>
+ <div class="note">Price per trade (oldest to newest): low ${fmt(lo,8)}, high ${fmt(hi,8)}.</div>`;
+}
+async function tokenPage(addr){
+ const t=await api("/api/token/"+addr);
+ $("#app").innerHTML=`<div class="card"><h2>${esc(t.symbol||short(t.token))} <span class="mut">${esc(t.name||"")}</span></h2>
+ <div class="stats" style="margin:8px 0">
+  <div class="stat"><div class="l">Last price</div><div class="v" style="font-size:16px">${fmt(t.last_price,8)} ${esc(t.quote)}</div></div>
+  <div class="stat"><div class="l">Trades</div><div class="v">${t.trades}</div></div>
+  <div class="stat"><div class="l">Traders</div><div class="v">${t.traders}</div></div>
+  <div class="stat"><div class="l">Volume</div><div class="v" style="font-size:16px">${fmt(t.volume_quote,3)} ${esc(t.quote)}</div></div></div>
+ <div class="note">Creator ${walLink(t.creator)} · launched ${ago(t.launched_ts)} · contract <a href="https://explorer.testnet.chain.robinhood.com/address/${esc(t.token)}" target="_blank" rel="noopener">${esc(short(t.token))}</a></div></div>
+ <div class="card" style="margin-top:12px"><h2>Price</h2>${chart(t.price_series)}</div>
+ <div class="grid" style="margin-top:12px">
+  <div class="card"><h2>Recent trades</h2>${t.recent_trades.map(r=>`<div class="row"><span><span class="${r.side==="buy"?"up":"down"}">${esc(r.side).toUpperCase()}</span> ${walLink(r.trader)}</span><span class="mut">${fmt(r.amount)} ${esc(t.quote)} · ${ago(r.ts)}</span></div>`).join("")||`<div class="empty">No trades indexed yet.</div>`}</div>
+  <div class="card"><h2>Biggest buyers seen</h2>${t.holders_seen.map(r=>`<div class="row"><span>${walLink(r.trader)}</span><span class="mut">spent ${fmt(r.spent,3)} · net ${fmt(r.net_tokens,2)}</span></div>`).join("")||`<div class="empty">None yet.</div>`}</div></div>`;
+}
+async function walletPage(addr){
+ const w=await api("/api/wallet/"+addr);
+ $("#app").innerHTML=`<div class="card"><h2>Wallet ${esc(short(w.wallet))}</h2>
+ <div class="note"><a href="https://explorer.testnet.chain.robinhood.com/address/${esc(w.wallet)}" target="_blank" rel="noopener">View on explorer</a></div>
+ ${w.summary.map(s=>`<div class="row"><span>Estimated PnL (${esc(s.quote)}) over ${s.tokens_traded} tokens</span>${pnl(s.pnl_quote,s.quote)}</div>`).join("")||`<div class="empty">No complete positions to total yet.</div>`}</div>
+ <div class="card" style="margin-top:12px"><h2>Positions</h2><div class="scroll"><table><tr><th>Token</th><th class="r">Trades</th><th class="r">Spent</th><th class="r">Received</th><th class="r">PnL</th></tr>
+ ${w.positions.map(p=>`<tr><td>${tokLink(p.token,p.symbol)}</td><td class="r">${p.trades}</td><td class="r">${fmt(p.quote_spent,3)}</td><td class="r">${fmt(p.quote_received,3)}</td><td class="r">${p.pnl==null?`<span class="mut" title="Bought before indexing began, or quote token unknown">n/a</span>`:pnl(p.pnl,p.quote)}</td></tr>`).join("")}</table></div></div>
+ ${w.created.length?`<div class="card" style="margin-top:12px"><h2>Tokens created</h2>${w.created.map(c=>`<div class="row"><span>${tokLink(c.token,c.symbol)} <span class="mut">${esc(c.name||"")}</span></span><span class="mut">${ago(c.ts)}</span></div>`).join("")}</div>`:""}`;
+}
+async function render(){
+ const h=location.hash.replace(/^#/,"")||"/",parts=h.split("/");
+ document.querySelectorAll("nav a").forEach(a=>a.classList.remove("on"));
+ try{
+  if(parts[1]==="token"&&parts[2])await tokenPage(parts[2]);
+  else if(parts[1]==="wallet"&&parts[2])await walletPage(parts[2]);
+  else if(parts[1]==="creators"){$("#nav-creators").classList.add("on");await creatorsPage()}
+  else{$("#nav-home").classList.add("on");await home()}
+ }catch(e){$("#app").innerHTML=`<div class="card"><div class="empty">${esc(e.message==="404"||e.message==="not found"?"Nothing indexed for that address yet.":"Data isn't ready yet ("+e.message+"). It retries automatically.")}</div></div>`}
+}
+function loop(){clearTimeout(timer);render().finally(()=>{timer=setTimeout(loop,8000)})}
+window.addEventListener("hashchange",loop);$("#hours").addEventListener("change",loop);loop();
+</script>
+</body>
+</html>

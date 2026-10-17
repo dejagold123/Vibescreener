@@ -10,6 +10,7 @@ from .decode import decode_curve, decode_launch, decode_router, pair_trades
 from .explorer import Explorer, ExplorerError, backfill_launches
 from .indexer import Indexer
 from .rpc import Rpc
+from . import web
 
 
 def factory_start_block():
@@ -41,13 +42,15 @@ def cmd_tx(rpc, db, args):
         print(idx.ingest(logs))
 
 
-def run_service(rpc, db, poll=3.0, explorer=None, log=print):
+def run_service(rpc, db, poll=3.0, explorer=None, log=print, serve_web=False, db_path=None):
     """What a hosted service runs: fill in token launches once, then follow the chain.
     A failing explorer must not stop indexing, so launches are retried on the next start."""
     if cfg.on_railway_without_storage():
         log("WARNING: no volume attached and VIBESCREENER_DB is not set, so the database lives in "
             "the container and is wiped on every redeploy. Add a volume (see DEPLOY.md).")
-    log(f"database: {cfg.DB_PATH}")
+    log(f"database: {db_path or cfg.DB_PATH}")
+    if serve_web:
+        web.start_background(db_path or cfg.DB_PATH, cfg.web_port(), log=log)
     log("rpc: " + ("alchemy" if "alchemy" in cfg.RPC_URL else "custom/public") + " endpoint")
     try:
         res = backfill_launches(explorer or Explorer(), db, log=log)
@@ -87,6 +90,9 @@ def main(argv=None):
     r.add_argument("--top", type=int, default=15)
     r.add_argument("--hours", type=int, default=24)
 
+    w = sub.add_parser("serve", help="dashboard + JSON API only (reads an existing database)")
+    w.add_argument("--port", type=int, default=cfg.web_port())
+
     sub.add_parser("quotes", help="list quote tokens seen (tells you which are ETH-like)")
     sub.add_parser("start-block", help="print the factory deploy block")
     e = sub.add_parser("export", help="write leaderboards to JSON")
@@ -95,6 +101,12 @@ def main(argv=None):
     args = p.parse_args(argv)
     if args.cmd == "start-block":
         print(factory_start_block())
+        return 0
+
+    if args.cmd == "serve":
+        DB(args.db)  # make sure the file and views exist
+        print(f"dashboard on http://localhost:{args.port}  (database: {args.db})")
+        web.serve(args.db, args.port).serve_forever()
         return 0
 
     db, rpc = DB(args.db), Rpc(args.rpc)
@@ -107,7 +119,7 @@ def main(argv=None):
     elif args.cmd == "launches":
         print(backfill_launches(Explorer(), db, max_pages=args.max_pages, restart=args.restart))
     elif args.cmd == "run":
-        run_service(rpc, db, poll=args.poll)
+        run_service(rpc, db, poll=args.poll, serve_web=True, db_path=args.db)
     elif args.cmd == "tx":
         cmd_tx(rpc, db, args)
     elif args.cmd == "report":

@@ -21,7 +21,10 @@ python -m vibescreener run                     # what a server runs: launches on
 # 3. look at the data
 python -m vibescreener report
 python -m vibescreener quotes                  # which quote tokens exist; shows which are ETH-like
-python -m vibescreener export --out vibescreener.json   # feed for the dashboard
+python -m vibescreener export --out vibescreener.json   # leaderboards as JSON
+
+# 4. dashboard + JSON API (also started automatically by `run`)
+python -m vibescreener serve --port 8000       # http://localhost:8000
 ```
 
 Options: `--rpc <url>` to use your own node, `--db <file>`.
@@ -35,6 +38,7 @@ Options: `--rpc <url>` to use your own node, `--db <file>`.
 | `VIBESCREENER_RPC` | a full RPC URL (overrides `ALCHEMY_API_KEY`) |
 | `VIBESCREENER_DB` | database file path (default: the Railway volume if attached, else `./vibescreener.db`) |
 | `VIBESCREENER_POLL` | seconds between polls in `follow` / `run` (default 3) |
+| `PORT` / `VIBESCREENER_PORT` | dashboard port (Railway sets `PORT`; default 8000) |
 
 Never commit keys to the repo. Deploying: see [DEPLOY.md](DEPLOY.md).
 

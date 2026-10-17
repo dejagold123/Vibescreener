@@ -11,6 +11,7 @@ them in the service's Variables tab instead of editing code:
     VIBESCREENER_RPC    a full RPC URL; wins over ALCHEMY_API_KEY
     VIBESCREENER_DB     database file path; wins over the Railway volume path
     VIBESCREENER_POLL   seconds between polls in follow/run mode (default 3)
+    PORT                dashboard port (Railway sets it; default 8000)
 """
 import os
 
@@ -61,6 +62,17 @@ def poll_seconds(env=None):
         return max(0.5, float(_clean(env.get("VIBESCREENER_POLL")) or 3.0))
     except ValueError:
         return 3.0
+
+
+def web_port(env=None):
+    """Railway sets PORT for the public domain; VIBESCREENER_PORT overrides it."""
+    env = os.environ if env is None else env
+    for key in ("VIBESCREENER_PORT", "PORT"):
+        try:
+            return int(_clean(env.get(key)))
+        except ValueError:
+            continue
+    return 8000
 
 
 RPC_URL = resolve_rpc_url()

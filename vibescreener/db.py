@@ -22,6 +22,8 @@ CREATE TABLE IF NOT EXISTS trades(
 CREATE INDEX IF NOT EXISTS trades_trader ON trades(trader);
 CREATE INDEX IF NOT EXISTS trades_token ON trades(token, block);
 CREATE INDEX IF NOT EXISTS tokens_creator ON tokens(creator);
+CREATE INDEX IF NOT EXISTS trades_ts ON trades(ts);
+CREATE INDEX IF NOT EXISTS tokens_ts ON tokens(ts);
 
 -- Last trade price per token, in quote units per token (approximate: ignores fees).
 DROP VIEW IF EXISTS token_last_price;
@@ -112,6 +114,8 @@ class DB:
             os.makedirs(folder, exist_ok=True)
         self.conn = sqlite3.connect(path)
         self.conn.row_factory = sqlite3.Row
+        if path != ":memory:":
+            self.conn.execute("PRAGMA journal_mode=WAL")  # lets the dashboard read while the indexer writes
         self.conn.executescript(SCHEMA)
 
     # cursor ----------------------------------------------------------
