@@ -100,6 +100,22 @@ class WebTests(unittest.TestCase):
         db.close()
         self.assertEqual((rows[0]["quote"], rows[0]["quote_is_token"]), ("AAA", True))
 
+    def test_search(self):
+        s, r = self.j("/api/search?q=aaa")                      # symbol, case-insensitive
+        self.assertEqual([t["token"] for t in r["tokens"]], [TOK_A])
+        s, r = self.j("/api/search?q=aaa%20coin")               # name
+        self.assertEqual(len(r["tokens"]), 1)
+        s, r = self.j(f"/api/search?q={ALICE}")                 # wallet address
+        self.assertEqual((r["wallets"], r["tokens"]), ([{"wallet": ALICE}], []))
+        s, r = self.j(f"/api/search?q={TOK_A.upper().replace('0X', '0x')}")   # token address, any case
+        self.assertEqual(len(r["tokens"]), 1)
+        s, r = self.j("/api/search?q=" + "0x" + "7" * 40)       # valid but unknown address
+        self.assertEqual((r["wallets"], r["tokens"]), ([], []))
+        for junk in ("a", "", "%25%25", "_", "x%27%20OR%201=1--"):    # too short, wildcards, injection
+            s, r = self.j("/api/search?q=" + junk)
+            self.assertEqual(s, 200)
+            self.assertEqual((r["tokens"], r["wallets"]), ([], []), junk)
+
     def test_token_and_wallet_detail(self):
         s, t = self.j(f"/api/token/{TOK_A}")
         self.assertEqual((s, t["symbol"], t["quote"], t["trades"]), (200, "AAA", "ETH", 3))

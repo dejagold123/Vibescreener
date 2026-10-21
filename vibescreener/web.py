@@ -141,6 +141,29 @@ def feed(db, limit=30):
     return _label(items, db)
 
 
+def search(db, text, limit=10):
+    """Find tokens by name/symbol/address and wallets by address."""
+    text = (text or "").strip()[:80]
+    out = {"tokens": [], "wallets": []}
+    if len(text) < 2:
+        return out
+    if ADDR.match(text):
+        a = text.lower()
+        out["tokens"] = _label(db.q("SELECT token, symbol, name, quote_token, trades, traders FROM token_stats "
+                                    "WHERE token = ?", (a,)), db)
+        if db.q("SELECT 1 FROM trades WHERE trader = ? LIMIT 1", (a,)) or \
+           db.q("SELECT 1 FROM tokens WHERE creator = ? LIMIT 1", (a,)):
+            out["wallets"] = [{"wallet": a}]
+        return out
+    like = "%" + text.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+    out["tokens"] = _label(db.q(
+        """SELECT token, symbol, name, quote_token, trades, traders FROM token_stats
+           WHERE LOWER(COALESCE(symbol, '')) LIKE ? ESCAPE '\\' OR LOWER(COALESCE(name, '')) LIKE ? ESCAPE '\\'
+           ORDER BY (LOWER(symbol) = ?) DESC, traders DESC, trades DESC LIMIT ?""",
+        (like, like, text.lower(), limit)), db)
+    return out
+
+
 def token_detail(db, addr):
     addr = addr.lower()
     rows = db.q("SELECT * FROM token_stats WHERE token = ?", (addr,))
@@ -193,6 +216,8 @@ def route(db_path, path, query):
             return 200, cached(("w", limit, quote), lambda: wallets(db, limit, quote))
         if path == "/api/creators":
             return 200, cached(("c", limit), lambda: creators(db, limit))
+        if path == "/api/search":
+            return 200, search(db, query.get("q", [""])[0])
         if path == "/api/feed":
             return 200, feed(db, _num(query.get("limit", [None])[0], 30, 1, 100))
         m = re.match(r"^/api/(token|wallet)/(.+)$", path)

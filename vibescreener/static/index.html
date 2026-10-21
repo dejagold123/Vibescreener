@@ -32,12 +32,19 @@ td{padding:6px 6px 6px 0;border-top:1px solid var(--line)}
 svg.chart{width:100%;height:160px}
 nav a{margin-left:14px;color:var(--muted)}nav a.on{color:var(--text);font-weight:600}
 .empty{color:var(--muted);padding:12px 0}
+.search{position:relative;flex:1;min-width:180px;max-width:360px;margin:0 12px}
+.search input{width:100%;background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font:inherit}
+#sres{position:absolute;left:0;right:0;top:100%;margin-top:4px;background:var(--card);border:1px solid var(--line);border-radius:8px;z-index:5;max-height:320px;overflow:auto}
+#sres a{display:flex;justify-content:space-between;gap:8px;padding:8px 10px;color:var(--text);border-top:1px solid var(--line)}
+#sres a:first-child{border-top:0}#sres a:hover,#sres a.sel{background:var(--bg);text-decoration:none}
+#sres .none{padding:10px;color:var(--muted)}
 </style>
 </head>
 <body>
 <div class="wrap">
 <header>
   <div><a class="brand" href="#/">VibeScreener</a><span id="live" class="pill">connecting</span></div>
+  <div class="search"><input id="q" type="search" placeholder="Search token name, symbol or wallet address" autocomplete="off" aria-label="Search"><div id="sres" hidden></div></div>
   <nav><a href="#/" id="nav-home">Overview</a><a href="#/creators" id="nav-creators">Creators</a>
   <select id="hours" aria-label="Time window"><option value="1">1h</option><option value="6">6h</option><option value="24" selected>24h</option><option value="168">7d</option></select></nav>
 </header>
@@ -132,6 +139,24 @@ async function render(){
   else{$("#nav-home").classList.add("on");await home()}
  }catch(e){$("#app").innerHTML=`<div class="card"><div class="empty">${esc(e.message==="404"||e.message==="not found"?"Nothing indexed for that address yet.":"Data isn't ready yet ("+e.message+"). It retries automatically.")}</div></div>`}
 }
+let sTimer=null,sSeq=0;
+function sClose(){$("#sres").hidden=true}
+async function sRun(){
+ const v=$("#q").value.trim(),box=$("#sres"),n=++sSeq;
+ if(v.length<2){sClose();return}
+ let r;try{r=await api("/api/search?q="+encodeURIComponent(v))}catch(e){return}
+ if(n!==sSeq)return;
+ const items=[...r.wallets.map(w=>`<a href="#/wallet/${esc(w.wallet)}"><span>Wallet ${esc(short(w.wallet))}</span><span class="mut">wallet</span></a>`),
+  ...r.tokens.map(t=>`<a href="#/token/${esc(t.token)}"><span>${esc(t.symbol||short(t.token))} <span class="mut">${esc(t.name||"")}</span></span><span class="mut">${t.trades} trades</span></a>`)];
+ box.innerHTML=items.length?items.join(""):`<div class="none">No match. Try a symbol, a name, or a full 0x address.</div>`;
+ box.hidden=false;
+}
+$("#q").addEventListener("input",()=>{clearTimeout(sTimer);sTimer=setTimeout(sRun,250)});
+$("#q").addEventListener("keydown",e=>{
+ if(e.key==="Escape"){sClose();e.target.blur()}
+ if(e.key==="Enter"){const a=$("#sres a");if(a){location.hash=a.getAttribute("href");sClose();e.target.value=""}}});
+$("#sres").addEventListener("click",()=>{setTimeout(()=>{sClose();$("#q").value=""},0)});
+document.addEventListener("click",e=>{if(!e.target.closest(".search"))sClose()});
 function loop(){clearTimeout(timer);render().finally(()=>{timer=setTimeout(loop,8000)})}
 window.addEventListener("hashchange",loop);$("#hours").addEventListener("change",loop);loop();
 </script>
