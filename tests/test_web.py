@@ -100,6 +100,50 @@ class WebTests(unittest.TestCase):
         db.close()
         self.assertEqual((rows[0]["quote"], rows[0]["quote_is_token"]), ("AAA", True))
 
+    def test_trending_change_and_pressure(self):
+        web._cache.clear()
+        db = web.ReadDB(self.path)
+        t = {r["token"]: r for r in web.trending(db, 24)}
+        a = t[TOK_A]                                    # buy 100@1.0 -> sell 100@1.5 -> sell 50@0.4
+        self.assertEqual((a["trades"], a["buys"], a["sells"]), (3, 1, 2))
+        self.assertAlmostEqual(a["buy_share"], 1 / 3)
+        self.assertAlmostEqual(a["first_price"], 0.01)
+        self.assertAlmostEqual(a["last_price"], 0.008)
+        self.assertAlmostEqual(a["change_pct"], -20.0)
+        self.assertAlmostEqual(a["net_flow"], 1.0 - 1.5 - 0.4)
+        self.assertIsNone(t[TOK_V]["change_pct"])        # single trade: no change claimed
+        self.assertEqual(web.trending(db, 24, sort="change"), [])   # nothing has 5+ trades
+        self.assertTrue(web.trending(db, 24, new_only=True))
+        self.assertEqual(web.trending(db, 24, sort="nonsense")[0]["token"], web.trending(db, 24)[0]["token"])
+        db.close()
+
+    def test_gainers_and_buy_pressure_rank_correctly(self):
+        path = os.path.join(self.dir, "g.db")
+        db = DB(path)
+        now = int(time.time())
+        up, dn = "0x" + "d1" * 20, "0x" + "d2" * 20
+        rows = []
+        for i in range(6):                       # price rises 1.0 -> 2.0 per token, all buys
+            rows.append(trade(100 + i, "buy", ALICE, up, 10, 10 * (1 + i / 5), 10 + i))
+        for i in range(6):                       # price falls 1.0 -> 0.5, mostly sells
+            rows.append(trade(200 + i, "sell" if i else "buy", BOB, dn, 10, 10 * (1 - i / 10), 20 + i))
+        db.save([launch(up, "UP", cfg.ZERO, now, 1), launch(dn, "DN", cfg.ZERO, now, 2)], rows,
+                {b: now - 60 for b in range(1, 40)})
+        rd = web.ReadDB(path)
+        g = web.trending(rd, 24, sort="change")
+        self.assertEqual([r["symbol"] for r in g], ["UP", "DN"])
+        self.assertAlmostEqual(g[0]["change_pct"], 100.0)
+        self.assertAlmostEqual(g[1]["change_pct"], -50.0)
+        b = web.trending(rd, 24, sort="buys")
+        self.assertEqual([r["symbol"] for r in b], ["UP", "DN"])
+        self.assertAlmostEqual(b[0]["buy_share"], 1.0)
+        rd.close()
+
+    def test_trending_endpoint_params(self):
+        for q in ("sort=change", "sort=buys&new=1", "sort=%27%3B--", "hours=banana&sort=traders"):
+            s, r = self.j("/api/trending?" + q)
+            self.assertEqual(s, 200, q)
+
     def test_search(self):
         s, r = self.j("/api/search?q=aaa")                      # symbol, case-insensitive
         self.assertEqual([t["token"] for t in r["tokens"]], [TOK_A])

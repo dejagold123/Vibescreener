@@ -32,6 +32,11 @@ td{padding:6px 6px 6px 0;border-top:1px solid var(--line)}
 svg.chart{width:100%;height:160px}
 nav a{margin-left:14px;color:var(--muted)}nav a.on{color:var(--text);font-weight:600}
 .empty{color:var(--muted);padding:12px 0}
+.tabs{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0 0 8px}
+.tab{background:none;color:var(--muted);border:1px solid var(--line);border-radius:8px;padding:3px 10px;font:inherit;cursor:pointer}
+.tab.on{color:var(--text);background:var(--bg);border-color:var(--muted)}
+.chk{margin-left:auto;color:var(--muted);font-size:12px}
+.badge{font-size:10px;padding:1px 6px;border-radius:6px;background:rgba(47,95,208,.15);color:var(--accent)}
 .search{position:relative;flex:1;min-width:180px;max-width:360px;margin:0 12px}
 .search input{width:100%;background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font:inherit}
 #sres{position:absolute;left:0;right:0;top:100%;margin-top:4px;background:var(--card);border:1px solid var(--line);border-radius:8px;z-index:5;max-height:320px;overflow:auto}
@@ -62,7 +67,7 @@ const walLink=w=>`<a href="#/wallet/${esc(w)}">${esc(short(w))}</a>`;
 const pnl=(v,q)=>v==null?"–":`<span class="${v>=0?"up":"down"}">${v>=0?"+":""}${fmt(v)} ${esc(q||"")}</span>`;
 const hours=()=>$("#hours").value;
 async function api(p){const r=await fetch(p);if(!r.ok)throw new Error((await r.json().catch(()=>({}))).error||r.status);return r.json()}
-let timer=null,walletQuote='eth';
+let timer=null,walletQuote='eth',tSort='traders',tNew=false;
 function setLive(ov){const el=$("#live");if(!ov||!ov.last_trade_ts){el.className="pill";el.textContent="no trades yet";return}
  const age=ov.now-ov.last_trade_ts;el.className="pill "+(age<600?"live":"stale");el.textContent=age<600?"live":"last trade "+ago(ov.last_trade_ts)}
 function feedRows(items){return items.length?items.map(i=>i.kind==="launch"
@@ -71,7 +76,7 @@ function feedRows(items){return items.length?items.map(i=>i.kind==="launch"
  :`<div class="empty">No activity yet.</div>`}
 async function home(){
  const h=hours();
- const [ov,tr,wl,fd]=await Promise.all([api("/api/overview?hours="+h),api("/api/trending?limit=15&hours="+h),api("/api/wallets?limit=10&quote="+walletQuote),api("/api/feed?limit=25")]);
+ const [ov,tr,wl,fd]=await Promise.all([api("/api/overview?hours="+h),api("/api/trending?limit=15&hours="+h+"&sort="+tSort+"&new="+(tNew?1:0)),api("/api/wallets?limit=10&quote="+walletQuote),api("/api/feed?limit=25")]);
  setLive(ov);
  const vol=ov.volume_window.map(v=>`${fmt(v.volume,2)} ${esc(v.quote)}`).join(" · ")||"–";
  const other=ov.other_quote_trades?`<div class="note" style="margin:2px 0 0">+ ${ov.other_quote_trades.toLocaleString()} trades in other quote tokens (not added up)</div>`:"";
@@ -84,8 +89,12 @@ async function home(){
   <div class="stat"><div class="l">Volume (${h}h)</div><div class="v" style="font-size:16px">${vol}</div>${other}</div>
  </div>
  <div class="grid">
-  <div class="card"><h2>Trending tokens</h2><div class="scroll"><table><tr><th>Token</th><th>Quote</th><th class="r">Trades</th><th class="r">Traders</th><th class="r">Volume</th></tr>
-  ${tr.length?tr.map(t=>`<tr><td>${tokLink(t.token,t.symbol)}</td><td class="mut">${esc(t.quote)}${t.quote_is_token?" (token)":""}</td><td class="r">${t.trades}</td><td class="r">${t.traders}</td><td class="r">${fmt(t.volume_quote,3)}</td></tr>`).join(""):`<tr><td colspan="5" class="empty">No trades in this window yet.</td></tr>`}</table></div></div>
+  <div class="card"><h2>Trending tokens</h2>
+  <div class="tabs">${[["traders","Most traders"],["change","Top gainers"],["buys","Buy pressure"]].map(([k,l])=>`<button class="tab${tSort===k?" on":""}" onclick="tSort='${k}';loop()">${l}</button>`).join("")}
+   <label class="chk"><input type="checkbox" ${tNew?"checked":""} onchange="tNew=this.checked;loop()"> New only</label></div>
+  <div class="scroll"><table><tr><th>Token</th><th>Quote</th><th class="r">Trades</th><th class="r">Buys</th><th class="r">Change</th><th class="r">Traders</th></tr>
+  ${tr.length?tr.map(t=>`<tr><td>${tokLink(t.token,t.symbol)}${t.launched_ts&&Date.now()/1000-t.launched_ts<h*3600?' <span class="badge">new</span>':""}</td><td class="mut">${esc(t.quote)}${t.quote_is_token?" (token)":""}</td><td class="r">${t.trades}</td><td class="r"><span class="${t.buy_share>=.5?"up":"down"}">${Math.round(t.buy_share*100)}%</span></td><td class="r">${t.change_pct==null?"–":`<span class="${t.change_pct>=0?"up":"down"}">${t.change_pct>=0?"+":""}${fmt(t.change_pct,1)}%</span>`}</td><td class="r">${t.traders}</td></tr>`).join(""):`<tr><td colspan="6" class="empty">${tSort==="traders"?"No trades in this window yet.":"No token has enough trades (5+) in this window yet."}</td></tr>`}</table></div>
+  <div class="note">Change = first to last trade price in the window, fees ignored. Buys = share of trades that were buys. Gainers and buy pressure need 5+ trades.</div></div>
   <div class="card"><h2>Top wallets by estimated PnL <select id="wq" aria-label="Quote token" onchange="walletQuote=this.value;loop()" style="float:right;font-size:12px"><option value="eth"${walletQuote==="eth"?" selected":""}>ETH</option><option value="vibevibe"${walletQuote==="vibevibe"?" selected":""}>VIBEVIBE</option></select></h2>
   ${wl.length?wl.map(w=>`<div class="row"><span>${walLink(w.trader)} <span class="mut">${w.tokens_traded} ${w.tokens_traded===1?"token":"tokens"}</span></span>${pnl(w.pnl_quote,w.quote)}</div>`).join(""):`<div class="empty">No complete positions yet.</div>`}
   <div class="note">All-time, ranked within ${walletQuote==="eth"?"ETH":"VIBEVIBE"}-quoted tokens only. Tokens quoted in other tokens aren't ranked because their amounts aren't comparable.</div>

@@ -110,8 +110,43 @@ def overview(db, hours=24):
     return out
 
 
-def trending(db, hours=24, limit=20):
-    return _label(report.trending_tokens(db, hours, limit), db)
+SORTS = {"traders": "traders DESC, trades DESC",
+         "change": "change_pct DESC",
+         "buys": "buy_share DESC, trades DESC"}
+
+
+def trending(db, hours=24, limit=20, sort="traders", new_only=False):
+    """Tokens active in the window, with price change and buy/sell pressure.
+    Price change compares the first and last trade price in the window (fees ignored).
+    The gainers and buy-pressure views ignore tokens with fewer than 5 trades,
+    because one or two trades say nothing."""
+    since = int(time.time()) - hours * 3600
+    order = SORTS.get(sort, SORTS["traders"])
+    sort = sort if sort in SORTS else "traders"
+    floor = 5 if sort in ("change", "buys") else 1
+    rows = db.q(f"""
+        WITH w AS (
+          SELECT token, trader, side, quote_amt, quote_amt / token_amt AS price,
+                 ROW_NUMBER() OVER (PARTITION BY token ORDER BY block, log_index) AS rn_first,
+                 ROW_NUMBER() OVER (PARTITION BY token ORDER BY block DESC, log_index DESC) AS rn_last
+          FROM trades WHERE ts >= ? AND token_amt > 0)
+        SELECT w.token AS token, k.symbol AS symbol, k.quote_token AS quote_token, k.ts AS launched_ts,
+               COUNT(*) AS trades, COUNT(DISTINCT w.trader) AS traders,
+               SUM(w.side = 'buy') AS buys, SUM(w.side = 'sell') AS sells,
+               SUM(w.quote_amt) AS volume_quote,
+               SUM(CASE WHEN w.side = 'buy' THEN w.quote_amt ELSE -w.quote_amt END) AS net_flow,
+               1.0 * SUM(w.side = 'buy') / COUNT(*) AS buy_share,
+               MAX(CASE WHEN w.rn_first = 1 THEN w.price END) AS first_price,
+               MAX(CASE WHEN w.rn_last = 1 THEN w.price END) AS last_price,
+               CASE WHEN COUNT(*) >= 2 AND MAX(CASE WHEN w.rn_first = 1 THEN w.price END) > 0
+                    THEN 100.0 * (MAX(CASE WHEN w.rn_last = 1 THEN w.price END)
+                                  / MAX(CASE WHEN w.rn_first = 1 THEN w.price END) - 1)
+               END AS change_pct
+        FROM w LEFT JOIN tokens k ON k.token = w.token
+        WHERE (? = 0 OR k.ts >= ?)
+        GROUP BY w.token HAVING COUNT(*) >= ? AND (? != 'change' OR change_pct IS NOT NULL)
+        ORDER BY {order} LIMIT ?""", (since, 1 if new_only else 0, since, floor, sort, limit))
+    return _label(rows, db)
 
 
 QUOTES = {"eth": cfg.ZERO, "vibevibe": cfg.VIBEVIBE_TOKEN}
@@ -210,7 +245,10 @@ def route(db_path, path, query):
         if path == "/api/overview":
             return 200, cached(("ov", hours), lambda: overview(db, hours))
         if path == "/api/trending":
-            return 200, cached(("tr", hours, limit), lambda: trending(db, hours, limit))
+            sort = query.get("sort", ["traders"])[0]
+            new_only = query.get("new", ["0"])[0] == "1"
+            return 200, cached(("tr", hours, limit, sort, new_only),
+                               lambda: trending(db, hours, limit, sort, new_only))
         if path == "/api/wallets":
             quote = (query.get("quote", ["eth"])[0] or "eth").lower()
             return 200, cached(("w", limit, quote), lambda: wallets(db, limit, quote))
