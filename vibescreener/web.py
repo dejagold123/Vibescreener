@@ -53,10 +53,22 @@ def cached(key, fn, ttl=CACHE_SECONDS):
     return value
 
 
-def _label(rows):
+def _label(rows, db=None):
+    """Add a readable `quote` name. Some tokens are quoted in another launched token;
+    those are shown by that token's symbol instead of a raw address."""
+    known = {}
+    if db is not None:
+        odd = sorted({r["quote_token"] for r in rows if r.get("quote_token")
+                      and r["quote_token"] not in (cfg.ZERO, cfg.VIBEVIBE_TOKEN)})
+        for i in range(0, len(odd), 400):
+            part = odd[i:i + 400]
+            for k in db.q(f"SELECT token, symbol FROM tokens WHERE token IN ({','.join('?' * len(part))})", part):
+                known[k["token"]] = k["symbol"]
     for r in rows:
         if "quote_token" in r:
-            r["quote"] = report.qlabel(r["quote_token"])
+            q = r["quote_token"]
+            r["quote"] = known.get(q) or report.qlabel(q)
+            r["quote_is_token"] = q in known
     return rows
 
 
@@ -84,10 +96,13 @@ def overview(db, hours=24):
         "first_trade_ts": one("SELECT MIN(ts) t FROM trades")["t"],
         "now": int(time.time()),
     }
-    vol = db.q("""SELECT k.quote_token AS quote_token, SUM(t.quote_amt) AS volume
+    vol = db.q("""SELECT k.quote_token AS quote_token, SUM(t.quote_amt) AS volume, COUNT(*) AS trades
                   FROM trades t LEFT JOIN tokens k ON k.token = t.token
                   WHERE t.ts >= ? GROUP BY k.quote_token""", (since,))
-    out["volume_window"] = _label(vol)
+    main = (cfg.ZERO, cfg.VIBEVIBE_TOKEN)
+    out["volume_window"] = _label([v for v in vol if v["quote_token"] in main])
+    # volume in other quote tokens has no common unit, so it is counted but never added up
+    out["other_quote_trades"] = sum(v["trades"] for v in vol if v["quote_token"] not in main)
     ex = one("SELECT * FROM pnl_excluded")
     out["pnl_excluded"] = {"incomplete_history": ex["incomplete_history"] or 0,
                            "unknown_quote": ex["unknown_quote"] or 0,
@@ -96,11 +111,17 @@ def overview(db, hours=24):
 
 
 def trending(db, hours=24, limit=20):
-    return _label(report.trending_tokens(db, hours, limit))
+    return _label(report.trending_tokens(db, hours, limit), db)
 
 
-def wallets(db, limit=20):
-    return _label(report.leaderboard_wallets(db, limit))
+QUOTES = {"eth": cfg.ZERO, "vibevibe": cfg.VIBEVIBE_TOKEN}
+
+
+def wallets(db, limit=20, quote="eth"):
+    """Ranked within one quote token only; amounts in different tokens are not comparable."""
+    q = QUOTES.get(quote, cfg.ZERO)
+    return _label(db.q("SELECT * FROM wallet_pnl WHERE trades > 0 AND quote_token = ? "
+                       "ORDER BY pnl_quote DESC LIMIT ?", (q, limit)))
 
 
 def creators(db, limit=20):
@@ -117,7 +138,7 @@ def feed(db, limit=30):
                               quote_token, NULL AS amount, NULL AS token_amt, ts, block, tx
                        FROM tokens WHERE ts IS NOT NULL ORDER BY ts DESC LIMIT ?""", (limit,))
     items = sorted(trades + launches, key=lambda r: r["ts"] or 0, reverse=True)[:limit]
-    return _label(items)
+    return _label(items, db)
 
 
 def token_detail(db, addr):
@@ -125,7 +146,7 @@ def token_detail(db, addr):
     rows = db.q("SELECT * FROM token_stats WHERE token = ?", (addr,))
     if not rows:
         return None
-    info = _label(rows)[0]
+    info = _label(rows, db)[0]
     info["curve"] = (db.q("SELECT curve, uri, tx FROM tokens WHERE token = ?", (addr,)) or [{}])[0]
     info["price_series"] = db.q(
         """SELECT ts, quote_amt / token_amt AS price FROM trades
@@ -149,7 +170,7 @@ def wallet_detail(db, addr):
     for p in pos:
         p["pnl"] = (p["quote_received"] + max(p["tokens_bought"] - p["tokens_sold"], 0)
                     * (p["last_price"] or 0) - p["quote_spent"]) if p["complete"] and p["quote_token"] else None
-    return {"wallet": addr, "positions": _label(pos),
+    return {"wallet": addr, "positions": _label(pos, db),
             "summary": _label(db.q("SELECT * FROM wallet_pnl WHERE trader = ?", (addr,))),
             "created": db.q("SELECT token, symbol, name, ts FROM tokens WHERE creator = ? ORDER BY ts DESC LIMIT 20",
                             (addr,))}
@@ -168,7 +189,8 @@ def route(db_path, path, query):
         if path == "/api/trending":
             return 200, cached(("tr", hours, limit), lambda: trending(db, hours, limit))
         if path == "/api/wallets":
-            return 200, cached(("w", limit), lambda: wallets(db, limit))
+            quote = (query.get("quote", ["eth"])[0] or "eth").lower()
+            return 200, cached(("w", limit, quote), lambda: wallets(db, limit, quote))
         if path == "/api/creators":
             return 200, cached(("c", limit), lambda: creators(db, limit))
         if path == "/api/feed":

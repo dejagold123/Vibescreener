@@ -74,7 +74,8 @@ class WebTests(unittest.TestCase):
         quotes = {v["quote"]: v["volume"] for v in o["volume_window"]}
         self.assertAlmostEqual(quotes["ETH"], 2.9)             # 1.0 + 1.5 + 0.4, never mixed with VIBEVIBE
         self.assertAlmostEqual(quotes["VIBEVIBE"], 2.0)
-        self.assertAlmostEqual(quotes["unknown-quote"], 2.0)
+        self.assertNotIn("unknown-quote", quotes)        # unlike units are counted, never summed
+        self.assertEqual(o["other_quote_trades"], 1)
         self.assertEqual(o["pnl_excluded"]["incomplete_history"], 1)
 
     def test_wallet_leaderboard_only_complete_positions(self):
@@ -83,6 +84,21 @@ class WebTests(unittest.TestCase):
         pnl = {(r["trader"], r["quote"]): r["pnl_quote"] for r in w}
         self.assertAlmostEqual(pnl[(ALICE, "ETH")], 0.5)
         self.assertNotIn((BOB, "ETH"), pnl)
+
+    def test_wallet_ranking_never_mixes_quote_tokens(self):
+        web._cache.clear()
+        s, v = self.j("/api/wallets?quote=vibevibe")
+        self.assertTrue(v and all(r["quote"] == "VIBEVIBE" for r in v))
+        s, e = self.j("/api/wallets?quote=eth")
+        self.assertTrue(e and all(r["quote"] == "ETH" for r in e))
+        s, d = self.j("/api/wallets?quote=0xdead")       # junk falls back to ETH
+        self.assertTrue(all(r["quote"] == "ETH" for r in d))
+
+    def test_token_quoted_in_another_token_is_named_by_symbol(self):
+        db = web.ReadDB(self.path)
+        rows = web._label([{"quote_token": TOK_A}], db)
+        db.close()
+        self.assertEqual((rows[0]["quote"], rows[0]["quote_is_token"]), ("AAA", True))
 
     def test_token_and_wallet_detail(self):
         s, t = self.j(f"/api/token/{TOK_A}")

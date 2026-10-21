@@ -55,7 +55,7 @@ const walLink=w=>`<a href="#/wallet/${esc(w)}">${esc(short(w))}</a>`;
 const pnl=(v,q)=>v==null?"–":`<span class="${v>=0?"up":"down"}">${v>=0?"+":""}${fmt(v)} ${esc(q||"")}</span>`;
 const hours=()=>$("#hours").value;
 async function api(p){const r=await fetch(p);if(!r.ok)throw new Error((await r.json().catch(()=>({}))).error||r.status);return r.json()}
-let timer=null;
+let timer=null,walletQuote='eth';
 function setLive(ov){const el=$("#live");if(!ov||!ov.last_trade_ts){el.className="pill";el.textContent="no trades yet";return}
  const age=ov.now-ov.last_trade_ts;el.className="pill "+(age<600?"live":"stale");el.textContent=age<600?"live":"last trade "+ago(ov.last_trade_ts)}
 function feedRows(items){return items.length?items.map(i=>i.kind==="launch"
@@ -64,22 +64,24 @@ function feedRows(items){return items.length?items.map(i=>i.kind==="launch"
  :`<div class="empty">No activity yet.</div>`}
 async function home(){
  const h=hours();
- const [ov,tr,wl,fd]=await Promise.all([api("/api/overview?hours="+h),api("/api/trending?limit=15&hours="+h),api("/api/wallets?limit=10"),api("/api/feed?limit=25")]);
+ const [ov,tr,wl,fd]=await Promise.all([api("/api/overview?hours="+h),api("/api/trending?limit=15&hours="+h),api("/api/wallets?limit=10&quote="+walletQuote),api("/api/feed?limit=25")]);
  setLive(ov);
- const vol=ov.volume_window.map(v=>`${fmt(v.volume,2)} ${esc(v.quote==="unknown-quote"?"?":v.quote)}`).join(" · ")||"–";
+ const vol=ov.volume_window.map(v=>`${fmt(v.volume,2)} ${esc(v.quote)}`).join(" · ")||"–";
+ const other=ov.other_quote_trades?`<div class="note" style="margin:2px 0 0">+ ${ov.other_quote_trades.toLocaleString()} trades in other quote tokens (not added up)</div>`:"";
  const ex=ov.pnl_excluded;
  $("#app").innerHTML=`
  <div class="stats">
   <div class="stat"><div class="l">Tokens launched</div><div class="v">${ov.tokens.toLocaleString()}</div></div>
   <div class="stat"><div class="l">Trades (${h}h)</div><div class="v">${ov.trades_window.toLocaleString()}</div></div>
   <div class="stat"><div class="l">Active wallets (${h}h)</div><div class="v">${ov.wallets_window.toLocaleString()}</div></div>
-  <div class="stat"><div class="l">Volume (${h}h)</div><div class="v" style="font-size:16px">${vol}</div></div>
+  <div class="stat"><div class="l">Volume (${h}h)</div><div class="v" style="font-size:16px">${vol}</div>${other}</div>
  </div>
  <div class="grid">
   <div class="card"><h2>Trending tokens</h2><div class="scroll"><table><tr><th>Token</th><th>Quote</th><th class="r">Trades</th><th class="r">Traders</th><th class="r">Volume</th></tr>
-  ${tr.length?tr.map(t=>`<tr><td>${tokLink(t.token,t.symbol)}</td><td class="mut">${esc(t.quote)}</td><td class="r">${t.trades}</td><td class="r">${t.traders}</td><td class="r">${fmt(t.volume_quote,3)}</td></tr>`).join(""):`<tr><td colspan="5" class="empty">No trades in this window yet.</td></tr>`}</table></div></div>
-  <div class="card"><h2>Top wallets by estimated PnL</h2>
-  ${wl.length?wl.map(w=>`<div class="row"><span>${walLink(w.trader)} <span class="mut">${w.tokens_traded} tokens</span></span>${pnl(w.pnl_quote,w.quote)}</div>`).join(""):`<div class="empty">No complete positions yet.</div>`}
+  ${tr.length?tr.map(t=>`<tr><td>${tokLink(t.token,t.symbol)}</td><td class="mut">${esc(t.quote)}${t.quote_is_token?" (token)":""}</td><td class="r">${t.trades}</td><td class="r">${t.traders}</td><td class="r">${fmt(t.volume_quote,3)}</td></tr>`).join(""):`<tr><td colspan="5" class="empty">No trades in this window yet.</td></tr>`}</table></div></div>
+  <div class="card"><h2>Top wallets by estimated PnL <select id="wq" aria-label="Quote token" onchange="walletQuote=this.value;loop()" style="float:right;font-size:12px"><option value="eth"${walletQuote==="eth"?" selected":""}>ETH</option><option value="vibevibe"${walletQuote==="vibevibe"?" selected":""}>VIBEVIBE</option></select></h2>
+  ${wl.length?wl.map(w=>`<div class="row"><span>${walLink(w.trader)} <span class="mut">${w.tokens_traded} ${w.tokens_traded===1?"token":"tokens"}</span></span>${pnl(w.pnl_quote,w.quote)}</div>`).join(""):`<div class="empty">No complete positions yet.</div>`}
+  <div class="note">All-time, ranked within ${walletQuote==="eth"?"ETH":"VIBEVIBE"}-quoted tokens only. Tokens quoted in other tokens aren't ranked because their amounts aren't comparable.</div>
   <div class="note">Left out: ${ex.incomplete_history} positions with missing buy history, ${ex.unknown_quote} with unknown quote token, of ${ex.total_positions} total.</div></div>
  </div>
  <div class="card"><h2>Live feed</h2>${feedRows(fd)}</div>`;
