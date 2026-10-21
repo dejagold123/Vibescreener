@@ -38,6 +38,8 @@ Options: `--rpc <url>` to use your own node, `--db <file>`.
 | `VIBESCREENER_RPC` | a full RPC URL (overrides `ALCHEMY_API_KEY`) |
 | `VIBESCREENER_DB` | database file path (default: the Railway volume if attached, else `./vibescreener.db`) |
 | `VIBESCREENER_POLL` | seconds between polls in `follow` / `run` (default 3) |
+| `IPFS_GATEWAY` | optional preferred IPFS gateway for token images and descriptions |
+| `VIBESCREENER_META` | set to `0` to turn token metadata fetching off |
 | `PORT` / `VIBESCREENER_PORT` | dashboard port (Railway sets `PORT`; default 8000) |
 
 Never commit keys to the repo. Deploying: see [DEPLOY.md](DEPLOY.md).
@@ -52,6 +54,12 @@ Never commit keys to the repo. Deploying: see [DEPLOY.md](DEPLOY.md).
 
 Each router trade is joined to the curve event that precedes it in the same transaction.
 Layouts are documented at the top of `vibescreener/decode.py`.
+
+## Dashboard pages
+
+Overview (stats, trending with price change and buy pressure, wallet leaderboard, live feed), search, token pages
+(chart, image, description), wallet pages (win rate, best and worst position), and creators (tokens up, active, hit rate).
+Token images and descriptions are fetched slowly in the background from each launch's IPFS link, newest tokens first.
 
 ## Tables and views
 

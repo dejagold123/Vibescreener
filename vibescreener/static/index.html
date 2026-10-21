@@ -32,6 +32,12 @@ td{padding:6px 6px 6px 0;border-top:1px solid var(--line)}
 svg.chart{width:100%;height:160px}
 nav a{margin-left:14px;color:var(--muted)}nav a.on{color:var(--text);font-weight:600}
 .empty{color:var(--muted);padding:12px 0}
+.sm{font-size:11px;line-height:1.3}
+.row>span:last-child{white-space:nowrap;flex:none}
+.feed .row{align-items:baseline}
+.feed .row>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.feed .row>span:last-child{white-space:nowrap;flex:none}
+@media(max-width:520px){.feed .row{flex-wrap:wrap}.feed .row>span:first-child{flex:1 1 100%}.feed .row>span:last-child{margin-left:auto;font-size:12px}}
 .tk{border-radius:6px;object-fit:cover;vertical-align:middle;margin-right:8px;background:var(--line);display:inline-block}
 .tabs{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0 0 8px}
 .tab{background:none;color:var(--muted);border:1px solid var(--line);border-radius:8px;padding:3px 10px;font:inherit;cursor:pointer}
@@ -95,15 +101,15 @@ async function home(){
   <div class="card"><h2>Trending tokens</h2>
   <div class="tabs">${[["traders","Most traders"],["change","Top gainers"],["buys","Buy pressure"]].map(([k,l])=>`<button class="tab${tSort===k?" on":""}" onclick="tSort='${k}';loop()">${l}</button>`).join("")}
    <label class="chk"><input type="checkbox" ${tNew?"checked":""} onchange="tNew=this.checked;loop()"> New only</label></div>
-  <div class="scroll"><table><tr><th>Token</th><th>Quote</th><th class="r">Trades</th><th class="r">Buys</th><th class="r">Change</th><th class="r">Traders</th></tr>
-  ${tr.length?tr.map(t=>`<tr><td>${img(t.image_urls,22)}${tokLink(t.token,t.symbol)}${t.launched_ts&&Date.now()/1000-t.launched_ts<h*3600?' <span class="badge">new</span>':""}</td><td class="mut">${esc(t.quote)}${t.quote_is_token?" (token)":""}</td><td class="r">${t.trades}</td><td class="r"><span class="${t.buy_share>=.5?"up":"down"}">${Math.round(t.buy_share*100)}%</span></td><td class="r">${t.change_pct==null?"–":`<span class="${t.change_pct>=0?"up":"down"}">${t.change_pct>=0?"+":""}${fmt(t.change_pct,1)}%</span>`}</td><td class="r">${t.traders}</td></tr>`).join(""):`<tr><td colspan="6" class="empty">${tSort==="traders"?"No trades in this window yet.":"No token has enough trades (5+) in this window yet."}</td></tr>`}</table></div>
+  <div class="scroll"><table><tr><th>Token</th><th class="r">Trades</th><th class="r">Buys</th><th class="r">Change</th><th class="r">Traders</th></tr>
+  ${tr.length?tr.map(t=>`<tr><td>${img(t.image_urls,22)}${tokLink(t.token,t.symbol)}${t.launched_ts&&Date.now()/1000-t.launched_ts<h*3600?' <span class="badge">new</span>':""}<div class="mut sm">${esc(t.quote)}${t.quote_is_token?" (token)":""}</div></td><td class="r">${t.trades}</td><td class="r"><span class="${t.buy_share>=.5?"up":"down"}">${Math.round(t.buy_share*100)}%</span></td><td class="r">${t.change_pct==null?"–":`<span class="${t.change_pct>=0?"up":"down"}">${t.change_pct>=0?"+":""}${fmt(t.change_pct,1)}%</span>`}</td><td class="r">${t.traders}</td></tr>`).join(""):`<tr><td colspan="5" class="empty">${tSort==="traders"?"No trades in this window yet.":"No token has enough trades (5+) in this window yet."}</td></tr>`}</table></div>
   <div class="note">Change = first to last trade price in the window, fees ignored. Buys = share of trades that were buys. Gainers and buy pressure need 5+ trades.</div></div>
   <div class="card"><h2>Top wallets by estimated PnL <select id="wq" aria-label="Quote token" onchange="walletQuote=this.value;loop()" style="float:right;font-size:12px"><option value="eth"${walletQuote==="eth"?" selected":""}>ETH</option><option value="vibevibe"${walletQuote==="vibevibe"?" selected":""}>VIBEVIBE</option></select></h2>
   ${wl.length?wl.map(w=>`<div class="row"><span>${walLink(w.trader)} <span class="mut">${w.positions} ${w.positions===1?"position":"positions"} · ${Math.round(w.win_rate*100)}% wins</span></span>${pnl(w.pnl_quote,w.quote)}</div>`).join(""):`<div class="empty">No complete positions yet.</div>`}
   <div class="note">All-time, ranked within ${walletQuote==="eth"?"ETH":"VIBEVIBE"}-quoted tokens only. Tokens quoted in other tokens aren't ranked because their amounts aren't comparable.</div>
   <div class="note">Left out: ${ex.incomplete_history} positions with missing buy history, ${ex.unknown_quote} with unknown quote token, of ${ex.total_positions} total.</div></div>
  </div>
- <div class="card"><h2>Live feed</h2>${feedRows(fd)}</div>`;
+ <div class="card feed"><h2>Live feed</h2>${feedRows(fd)}</div>`;
 }
 let cSort='traders';
 async function creatorsPage(){
