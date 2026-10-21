@@ -180,6 +180,139 @@ def wallets(db, limit=20, quote="eth"):
         WHERE p.trades > 0 AND p.quote_token = ? ORDER BY p.pnl_quote DESC LIMIT ?""", (q, q, limit)))
 
 
+# ---- token table (DexScreener-style) ------------------------------------------
+
+WINDOWS = {"5m": 300, "1h": 3600, "6h": 21600, "24h": 86400}
+
+
+def _changes(series, now):
+    """Price change per window, in percent. `series` is [(ts, price)] oldest first.
+    Baseline = the last price before the window opened (so a move that started earlier still
+    counts), else the first price inside it. None when there is nothing to compare."""
+    out = {}
+    for label, secs in WINDOWS.items():
+        cut = now - secs
+        inside = [p for t, p in series if t >= cut]
+        before = [p for t, p in series if t < cut]
+        base = before[-1] if before else (inside[0] if len(inside) >= 2 else None)
+        out[label] = (100.0 * (inside[-1] / base - 1)) if inside and base else None
+    return out
+
+
+def _windows(trades, now):
+    """trades: [(ts, side, trader, quote_amt, price)] oldest first, last 24h. Returns per-window
+    counts plus price changes. Price series uses buys only when there are 2+ (a buy and a sell
+    differ by the fee, which would read as a fake move)."""
+    out = {}
+    for label, secs in WINDOWS.items():
+        part = [t for t in trades if t[0] >= now - secs]
+        buys = [t for t in part if t[1] == "buy"]
+        out[label] = {"txns": len(part), "buys": len(buys), "sells": len(part) - len(buys),
+                      "volume": sum(t[3] for t in part), "buy_volume": sum(t[3] for t in buys),
+                      "makers": len({t[2] for t in part})}
+    buys_only = [(t[0], t[4]) for t in trades if t[1] == "buy"]
+    series = buys_only if len(buys_only) >= 2 else [(t[0], t[4]) for t in trades]
+    return {"w": out, "ch": _changes(series, now),
+            "price": trades[-1][4] if trades else None, "last_ts": trades[-1][0] if trades else None}
+
+
+def _recent_by_token(db, now, only=None):
+    sql = ("SELECT token, ts, side, trader, quote_amt, quote_amt / token_amt AS price FROM trades "
+           "WHERE ts >= ? AND token_amt > 0")
+    params = [now - 86400]
+    if only:
+        sql += " AND token = ?"
+        params.append(only)
+    by = {}
+    for r in db.conn.execute(sql + " ORDER BY token, block, log_index", params):
+        by.setdefault(r[0], []).append((r[1], r[2], r[3], r[4], r[5]))
+    return by
+
+
+PAIR_SORTS = ("trending", "new", "gainers", "volume")
+
+
+def pairs(db, quote="eth", sort="trending", window="24h", limit=100):
+    """One row per token for the main table. Ranking (volume) is only meaningful inside one
+    quote token, so quote=all falls back to ranking volume by trades."""
+    now = int(time.time())
+    window = window if window in WINDOWS else "24h"
+    sort = sort if sort in PAIR_SORTS else "trending"
+    want = QUOTES.get(quote)                                    # None = all quote tokens
+    stats = {tok: _windows(tr, now) for tok, tr in _recent_by_token(db, now).items()}
+    toks = set(stats)
+    if sort == "new":                                           # new launches show even before their first trade
+        toks |= {r["token"] for r in db.q("SELECT token FROM tokens WHERE ts >= ?", (now - 86400,))}
+    toks = sorted(toks)
+    info = {}
+    for i in range(0, len(toks), 400):
+        part = toks[i:i + 400]
+        for r in db.q(f"""SELECT k.token, k.symbol, k.name, k.quote_token, k.ts AS launched_ts, m.image_cid
+                          FROM tokens k LEFT JOIN token_meta m ON m.token = k.token
+                          WHERE k.token IN ({','.join('?' * len(part))})""", part):
+            info[r["token"]] = r
+    rows = []
+    for tok in toks:
+        k = info.get(tok, {"token": tok, "symbol": None, "name": None, "quote_token": None,
+                           "launched_ts": None, "image_cid": None})
+        if want is not None and k["quote_token"] != want:
+            continue
+        st = stats.get(tok) or _windows([], now)
+        w = st["w"][window]
+        if sort != "new" and w["txns"] == 0:
+            continue
+        price = st["price"]
+        if price is None:
+            lp = db.q("SELECT price FROM token_last_price WHERE token = ?", (tok,))
+            price = lp[0]["price"] if lp else None
+        rows.append({**k, "price": price, "last_ts": st["last_ts"], "txns": w["txns"], "buys": w["buys"],
+                     "sells": w["sells"], "volume": w["volume"], "buy_volume": w["buy_volume"],
+                     "makers": w["makers"], "change": st["ch"][window],
+                     **{"ch" + lbl: v for lbl, v in st["ch"].items()}})
+    if sort == "gainers":
+        rows = [r for r in rows if r["change"] is not None and r["txns"] >= 5 and r["makers"] >= 3]
+        rows.sort(key=lambda r: r["change"], reverse=True)
+    elif sort == "volume" and want is not None:
+        rows.sort(key=lambda r: r["volume"], reverse=True)
+    elif sort == "new":
+        rows.sort(key=lambda r: r["launched_ts"] or 0, reverse=True)
+    else:
+        rows.sort(key=lambda r: (r["makers"], r["txns"]), reverse=True)
+    rows = rows[:limit]
+    return {"window": window, "sort": sort, "quote": quote if want is not None else "all",
+            "volume_comparable": want is not None, "rows": _img(_label(rows, db))}
+
+
+INTERVALS = (60, 300, 900, 3600)
+
+
+def candles(db, addr, interval=300, count=200):
+    """OHLC candles from trade prices (fees ignored). Empty buckets are filled flat so the
+    time axis stays honest."""
+    interval = interval if interval in INTERVALS else 300
+    rows = db.q("""SELECT ts, side, quote_amt AS q, quote_amt / token_amt AS price FROM trades
+                   WHERE token = ? AND token_amt > 0 AND ts IS NOT NULL
+                   ORDER BY block DESC, log_index DESC LIMIT 5000""", (addr.lower(),))[::-1]
+    by = {}
+    for r in rows:
+        b = r["ts"] // interval * interval
+        c = by.get(b)
+        if c is None:
+            by[b] = {"t": b, "o": r["price"], "h": r["price"], "l": r["price"], "c": r["price"],
+                     "v": r["q"], "buys": int(r["side"] == "buy"), "sells": int(r["side"] != "buy")}
+        else:
+            c["h"], c["l"], c["c"] = max(c["h"], r["price"]), min(c["l"], r["price"]), r["price"]
+            c["v"] += r["q"]
+            c["buys" if r["side"] == "buy" else "sells"] += 1
+    if not by:
+        return {"interval": interval, "candles": []}
+    out, prev = [], None
+    for b in range(min(by), max(by) + interval, interval):
+        out.append(by.get(b) or {"t": b, "o": prev, "h": prev, "l": prev, "c": prev, "v": 0, "buys": 0, "sells": 0})
+        prev = out[-1]["c"]
+    return {"interval": interval, "candles": out[-count:]}
+
+
 CREATOR_SORTS = {"traders": "unique_traders DESC, trades DESC",
                  "hit": "hit_rate DESC, traded DESC",
                  "launched": "tokens_launched DESC, trades DESC"}
@@ -269,6 +402,8 @@ def token_detail(db, addr):
     except ValueError:
         socials = {}
     info["socials"] = {k: v for k, v in socials.items() if str(v).lower().startswith(("http://", "https://"))}
+    now = int(time.time())
+    info["stats"] = _windows(_recent_by_token(db, now, addr).get(addr, []), now)
     info["price_series"] = db.q(
         """SELECT ts, quote_amt / token_amt AS price FROM trades
            WHERE token = ? AND token_amt > 0 ORDER BY block DESC, log_index DESC LIMIT 300""", (addr,))[::-1]
@@ -331,6 +466,15 @@ def route(db_path, path, query):
         if path == "/api/creators":
             sort = query.get("sort", ["traders"])[0]
             return 200, cached(("c", limit, sort, hours), lambda: creators(db, limit, sort, hours))
+        if path == "/api/pairs":
+            q = lambda k, d: (query.get(k, [d])[0] or d).lower()
+            return 200, cached(("pairs", q("quote", "eth"), q("sort", "trending"), q("window", "24h"), limit),
+                               lambda: pairs(db, q("quote", "eth"), q("sort", "trending"), q("window", "24h"), limit), ttl=6)
+        m = re.match(r"^/api/token/([^/]+)/candles$", path)
+        if m:
+            if not ADDR.match(m.group(1)):
+                return 400, {"error": "address must be 0x followed by 40 hex characters"}
+            return 200, candles(db, m.group(1), _num(query.get("interval", [None])[0], 300, 60, 3600))
         if path == "/api/search":
             return 200, search(db, query.get("q", [""])[0])
         if path == "/api/feed":

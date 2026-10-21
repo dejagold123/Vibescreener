@@ -57,9 +57,17 @@ Layouts are documented at the top of `vibescreener/decode.py`.
 
 ## Dashboard pages
 
-Overview (stats, trending with price change and buy pressure, wallet leaderboard, live feed), search, token pages
-(chart, image, description), wallet pages (win rate, best and worst position), and creators (tokens up, active, hit rate).
-Token images and descriptions are fetched slowly in the background from each launch's IPFS link, newest tokens first.
+- **Tokens** (home): a DexScreener-style table with price, age, transactions, a buy/sell bar, volume, makers and price
+  change over 5m, 1h, 6h and 24h. Tabs for Trending, New, Gainers and Top volume; filters for ETH, VIBEVIBE or all
+  quote tokens and a ranking window; click a column to sort. A live trades rail sits beside it.
+- **Token page**: candlestick chart (1m, 5m, 15m, 1h) with volume, 24h buy/sell activity, trades, top traders,
+  image, description and links.
+- **Wallets**: leaderboard by estimated PnL and win rate, per quote token. **Wallet page**: positions, best and worst.
+- **Creators**: how each creator's tokens fared. **Search**: token name, symbol or address, and wallet address.
+
+Volume is in each token's own quote token and is only ranked inside one quote token. Price changes compare trade prices
+(buys only when there are two or more) and ignore fees. Token images and descriptions are fetched slowly in the background
+from each launch's IPFS link, newest tokens first.
 
 ## Tables and views
 
