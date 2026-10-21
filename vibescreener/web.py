@@ -15,7 +15,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from . import config as cfg
-from . import meta, report
+from . import brief, meta, report
 
 STATIC = os.path.join(os.path.dirname(__file__), "static")
 ADDR = re.compile(r"^0x[0-9a-fA-F]{40}$")
@@ -475,6 +475,9 @@ def route(db_path, path, query):
             if not ADDR.match(m.group(1)):
                 return 400, {"error": "address must be 0x followed by 40 hex characters"}
             return 200, candles(db, m.group(1), _num(query.get("interval", [None])[0], 300, 60, 3600))
+        if path == "/api/brief":
+            b = brief.latest(db)
+            return 200, {"brief": b, "now": int(time.time())}
         if path == "/api/search":
             return 200, search(db, query.get("q", [""])[0])
         if path == "/api/feed":

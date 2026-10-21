@@ -87,6 +87,11 @@ th.tk1{left:0;z-index:2}
 #ro{position:absolute;left:8px;top:4px;font:12px var(--mono);color:var(--muted);pointer-events:none;background:var(--panel);padding:0 4px;border-radius:4px}
 .kv{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px solid var(--line);font-size:13px}.kv:first-of-type{border-top:0}
 .kv span:first-child{color:var(--muted)}
+.brief p{margin:6px 0 4px;line-height:1.55;max-width:80ch}
+.brief summary{cursor:pointer;color:var(--accent);font-size:12px;margin-top:4px}
+.brief .fx{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px 18px;margin-top:8px}
+.brief .fx h3{margin:0 0 3px;font-size:12px;color:var(--muted);font-weight:500}
+.brief .fx div div{font-size:12.5px;padding:2px 0}
 .desc{white-space:pre-wrap;word-break:break-word;color:var(--muted);font-size:13px;margin:0 0 8px}
 @media(max-width:640px){.bar{flex-wrap:wrap;gap:8px}.search{order:3;flex:1 1 100%;max-width:none}.right{margin-left:auto}.brand{font-size:16px}.thead .px{font-size:22px}}
 </style>
@@ -156,12 +161,21 @@ function feedRows(items){return items.length?items.map(i=>i.kind==="launch"
  ?`<div class="rowl"><span><span class="badge">new</span> ${tokLink(i.token,i.symbol)} by ${walLink(i.trader)}</span><span class="mut sm">${ageS(i.ts)}</span></div>`
  :`<div class="rowl"><span><span class="${i.side==="buy"?"up":"down"}">${i.side==="buy"?"Buy":"Sell"}</span> ${tokLink(i.token,i.symbol)} <span class="mut">${walLink(i.trader)}</span></span><span class="mut sm num">${fmtC(i.amount)} ${esc(i.quote)} · ${ageS(i.ts)}</span></div>`).join(""):`<div class="empty">No activity yet.</div>`}
 
+const FX_LABELS={totals:"Totals",most_active_eth_tokens:"Most active ETH tokens",biggest_gainers_eth_tokens:"Biggest gainers",newest_launches_with_trades:"New launches with trades",best_eth_wallets_by_estimated_pnl:"Best wallets (est. PnL)",creators_with_most_traders:"Creators with most traders"};
+function factsHtml(f){return Object.entries(FX_LABELS).filter(([k])=>f&&f[k]&&(Array.isArray(f[k])?f[k].length:true)).map(([k,l])=>{const v=f[k];
+ const rows=Array.isArray(v)?v.map(o=>{const e=Object.entries(o);return`<b>${esc(e[0][1])}</b> `+e.slice(1).map(([a,b])=>esc(a.replace(/_/g," "))+" "+esc(b)).join(" · ")}):Object.entries(v).map(([a,b])=>esc(a.replace(/_/g," "))+": "+esc(b));
+ return`<div><h3>${l}</h3>${rows.map(r=>`<div class="num">${r}</div>`).join("")}</div>`}).join("")}
+function briefCard(b,now){if(!b)return`<div class="card brief"><b>Market brief</b><p class="mut">The first brief appears shortly after trades start coming in.</p></div>`;
+ const ai=b.source==="ai";return`<div class="card brief"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap"><b>Market brief</b><span class="sm mut">${ageS(b.ts)} ago · ${ai?"written by AI from the figures below":"automatic summary of the figures below"}</span></div>
+ <p>${esc(b.text)}</p><details><summary>Show the data it used</summary><div class="fx">${factsHtml(b.facts)}</div><div class="note">As of ${esc((b.facts&&b.facts.as_of)||"")}. Not financial advice.</div></details></div>`}
 async function home(){
+ const bp=api("/api/brief").catch(()=>({brief:null,now:0}));
  const [pr,ov,fd]=await Promise.all([api(`/api/pairs?sort=${S.sort}&quote=${S.quote}&window=${S.win}&limit=100`),api("/api/overview?hours=24"),api("/api/feed?limit=18")]);
  setLive(ov);strip(ov);
  const head=COLS.map(([k,l,a,f])=>`<th class="${a}${k==="token"?" tk1":""}${S.col===k?" on":""}" ${f?`onclick="sortBy('${k}')" aria-sort="${S.col===k?(S.dir<0?"descending":"ascending"):"none"}"`:""}>${l==="Txns"||l==="Volume"||l==="Makers"?l+" "+S.win:l}${S.col===k?(S.dir<0?" ↓":" ↑"):""}</th>`).join("");
  const empty={trending:"No token has traded in this window yet.",new:"No launches in the last 24 hours.",gainers:"No token has 5+ trades from 3+ wallets with a price move in this window yet.",volume:"No trades in this window yet."}[S.sort];
- $("#app").innerHTML=`<div class="layout rail"><section><div class="filters">
+ const br=await bp;
+ $("#app").innerHTML=`<div class="layout rail"><section>${briefCard(br.brief)}<div class="filters" style="margin-top:12px">
   ${seg("sort",[["trending","Trending"],["new","New"],["gainers","Gainers"],["volume","Top volume"]])}
   ${seg("quote",[["eth","ETH"],["vibevibe","VIBEVIBE"],["all","All"]])}
   ${seg("win",[["5m","5m"],["1h","1h"],["6h","6h"],["24h","24h"]])}</div>

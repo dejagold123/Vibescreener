@@ -14,6 +14,9 @@ them in the service's Variables tab instead of editing code:
     PORT                dashboard port (Railway sets it; default 8000)
     IPFS_GATEWAY        preferred IPFS gateway for token metadata and images (optional)
     VIBESCREENER_META   set to 0 to turn token metadata fetching off
+    LLM_API_KEY         key for an OpenAI-compatible AI provider (or OPENROUTER_API_KEY); enables AI wording
+    LLM_BASE_URL / LLM_MODEL   provider URL (default OpenRouter) and model name(s), comma separated
+    BRIEF_EVERY_HOURS   how often the market brief is rewritten (default 3)
 """
 import os
 
@@ -80,6 +83,31 @@ def _gateways(env=None):
 def meta_disabled(env=None):
     env = os.environ if env is None else env
     return _clean(env.get("VIBESCREENER_META")).lower() in ("0", "false", "off", "no")
+
+
+DEFAULT_MODELS = "meta-llama/llama-3.3-70b-instruct:free,openai/gpt-oss-120b:free"
+
+
+def llm_settings(env=None):
+    """Any OpenAI-compatible provider. Defaults to OpenRouter's free models; switch provider by
+    changing LLM_BASE_URL / LLM_API_KEY / LLM_MODEL in the Variables tab, no code change."""
+    env = os.environ if env is None else env
+    models = [m.strip() for m in _clean(env.get("LLM_MODEL") or DEFAULT_MODELS).split(",") if m.strip()]
+    return {"base_url": (_clean(env.get("LLM_BASE_URL")) or "https://openrouter.ai/api/v1").rstrip("/"),
+            "key": _clean(env.get("LLM_API_KEY") or env.get("OPENROUTER_API_KEY")),
+            "models": models or DEFAULT_MODELS.split(",")}
+
+
+def _float(env, name, default, lo, hi):
+    try:
+        return max(lo, min(hi, float(_clean(env.get(name)) or default)))
+    except ValueError:
+        return default
+
+
+def brief_hours(env=None):
+    env = os.environ if env is None else env
+    return _float(env, "BRIEF_EVERY_HOURS", 3.0, 0.5, 48.0)
 
 
 def web_port(env=None):
