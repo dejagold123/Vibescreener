@@ -12,6 +12,8 @@ them in the service's Variables tab instead of editing code:
     VIBESCREENER_DB     database file path; wins over the Railway volume path
     VIBESCREENER_POLL   seconds between polls in follow/run mode (default 3)
     PORT                dashboard port (Railway sets it; default 8000)
+    IPFS_GATEWAY        preferred IPFS gateway for token metadata and images (optional)
+    VIBESCREENER_META   set to 0 to turn token metadata fetching off
 """
 import os
 
@@ -68,6 +70,18 @@ def poll_seconds(env=None):
         return 3.0
 
 
+def _gateways(env=None):
+    env = os.environ if env is None else env
+    own = _clean(env.get("IPFS_GATEWAY"))
+    base = ["https://ipfs.io/ipfs/", "https://gateway.pinata.cloud/ipfs/", "https://dweb.link/ipfs/"]
+    return ([own.rstrip("/") + "/"] if own.startswith("http") else []) + [g for g in base if g != own]
+
+
+def meta_disabled(env=None):
+    env = os.environ if env is None else env
+    return _clean(env.get("VIBESCREENER_META")).lower() in ("0", "false", "off", "no")
+
+
 def web_port(env=None):
     """Railway sets PORT for the public domain; VIBESCREENER_PORT overrides it."""
     env = os.environ if env is None else env
@@ -79,6 +93,7 @@ def web_port(env=None):
     return 8000
 
 
+IPFS_GATEWAYS = _gateways()
 RPC_URL = resolve_rpc_url()
 DB_PATH = resolve_db_path()
 

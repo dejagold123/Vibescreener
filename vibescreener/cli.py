@@ -10,7 +10,7 @@ from .decode import decode_curve, decode_launch, decode_router, pair_trades
 from .explorer import Explorer, ExplorerError, backfill_launches
 from .indexer import Indexer
 from .rpc import Rpc, RpcAuthError
-from . import web
+from . import meta, web
 
 
 def factory_start_block():
@@ -51,6 +51,7 @@ def run_service(rpc, db, poll=3.0, explorer=None, log=print, serve_web=False, db
     log(f"database: {db_path or cfg.DB_PATH}")
     if serve_web:
         web.start_background(db_path or cfg.DB_PATH, cfg.web_port(), log=log)
+        meta.start_background(db_path or cfg.DB_PATH, log=log)
     log("rpc: " + ("alchemy" if "alchemy" in cfg.RPC_URL else "custom/public") + " endpoint")
     try:
         rpc.block_number()

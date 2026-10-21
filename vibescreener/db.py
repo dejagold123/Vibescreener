@@ -19,6 +19,9 @@ CREATE TABLE IF NOT EXISTS trades(
   token TEXT, curve TEXT, token_amount TEXT, token_fee TEXT, quote_amount TEXT,
   quote_fee TEXT, reserve_after TEXT, native_in TEXT, token_amt REAL, quote_amt REAL,
   PRIMARY KEY(tx, log_index));
+CREATE TABLE IF NOT EXISTS token_meta(
+  token TEXT PRIMARY KEY, uri TEXT, description TEXT, image_cid TEXT, socials TEXT,
+  status TEXT, attempts INTEGER, next_try INTEGER);
 CREATE INDEX IF NOT EXISTS trades_trader ON trades(trader);
 CREATE INDEX IF NOT EXISTS trades_token ON trades(token, block);
 CREATE INDEX IF NOT EXISTS tokens_creator ON tokens(creator);
@@ -112,7 +115,7 @@ class DB:
         folder = os.path.dirname(path)
         if path != ":memory:" and folder:
             os.makedirs(folder, exist_ok=True)
-        self.conn = sqlite3.connect(path)
+        self.conn = sqlite3.connect(path, timeout=30)
         self.conn.row_factory = sqlite3.Row
         if path != ":memory:":
             self.conn.execute("PRAGMA journal_mode=WAL")  # lets the dashboard read while the indexer writes

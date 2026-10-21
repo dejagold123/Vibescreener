@@ -15,7 +15,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from . import config as cfg
-from . import report
+from . import meta, report
 
 STATIC = os.path.join(os.path.dirname(__file__), "static")
 ADDR = re.compile(r"^0x[0-9a-fA-F]{40}$")
@@ -69,6 +69,15 @@ def _label(rows, db=None):
             q = r["quote_token"]
             r["quote"] = known.get(q) or report.qlabel(q)
             r["quote_is_token"] = q in known
+    return rows
+
+
+def _img(rows):
+    """Turn a stored image content id into gateway URLs the browser can load (it tries them in
+    order). Only ids that pass the content-id check ever become URLs."""
+    for r in rows:
+        cid = r.pop("image_cid", None)
+        r["image_urls"] = [g + cid for g in cfg.IPFS_GATEWAYS] if cid and meta.CID.match(cid) else []
     return rows
 
 
@@ -130,7 +139,7 @@ def trending(db, hours=24, limit=20, sort="traders", new_only=False):
                  ROW_NUMBER() OVER (PARTITION BY token ORDER BY block, log_index) AS rn_first,
                  ROW_NUMBER() OVER (PARTITION BY token ORDER BY block DESC, log_index DESC) AS rn_last
           FROM trades WHERE ts >= ? AND token_amt > 0)
-        SELECT w.token AS token, k.symbol AS symbol, k.quote_token AS quote_token, k.ts AS launched_ts,
+        SELECT w.token AS token, k.symbol AS symbol, k.quote_token AS quote_token, k.ts AS launched_ts, m.image_cid AS image_cid,
                COUNT(*) AS trades, COUNT(DISTINCT w.trader) AS traders,
                SUM(w.side = 'buy') AS buys, SUM(w.side = 'sell') AS sells,
                SUM(w.quote_amt) AS volume_quote,
@@ -142,11 +151,11 @@ def trending(db, hours=24, limit=20, sort="traders", new_only=False):
                     THEN 100.0 * (MAX(CASE WHEN w.rn_last = 1 THEN w.price END)
                                   / MAX(CASE WHEN w.rn_first = 1 THEN w.price END) - 1)
                END AS change_pct
-        FROM w LEFT JOIN tokens k ON k.token = w.token
+        FROM w LEFT JOIN tokens k ON k.token = w.token LEFT JOIN token_meta m ON m.token = w.token
         WHERE (? = 0 OR k.ts >= ?)
         GROUP BY w.token HAVING COUNT(*) >= ? AND (? != 'change' OR change_pct IS NOT NULL)
         ORDER BY {order} LIMIT ?""", (since, 1 if new_only else 0, since, floor, sort, limit))
-    return _label(rows, db)
+    return _img(_label(rows, db))
 
 
 QUOTES = {"eth": cfg.ZERO, "vibevibe": cfg.VIBEVIBE_TOKEN}
@@ -253,6 +262,13 @@ def token_detail(db, addr):
         return None
     info = _label(rows, db)[0]
     info["curve"] = (db.q("SELECT curve, uri, tx FROM tokens WHERE token = ?", (addr,)) or [{}])[0]
+    m = db.q("SELECT description, image_cid, socials FROM token_meta WHERE token = ? AND status = 'ok'", (addr,))
+    info.update(_img(m)[0] if m else {"description": "", "image_urls": [], "socials": "{}"})
+    try:
+        socials = json.loads(info.get("socials") or "{}")
+    except ValueError:
+        socials = {}
+    info["socials"] = {k: v for k, v in socials.items() if str(v).lower().startswith(("http://", "https://"))}
     info["price_series"] = db.q(
         """SELECT ts, quote_amt / token_amt AS price FROM trades
            WHERE token = ? AND token_amt > 0 ORDER BY block DESC, log_index DESC LIMIT 300""", (addr,))[::-1]
