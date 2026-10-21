@@ -96,7 +96,7 @@ async function home(){
   ${tr.length?tr.map(t=>`<tr><td>${tokLink(t.token,t.symbol)}${t.launched_ts&&Date.now()/1000-t.launched_ts<h*3600?' <span class="badge">new</span>':""}</td><td class="mut">${esc(t.quote)}${t.quote_is_token?" (token)":""}</td><td class="r">${t.trades}</td><td class="r"><span class="${t.buy_share>=.5?"up":"down"}">${Math.round(t.buy_share*100)}%</span></td><td class="r">${t.change_pct==null?"–":`<span class="${t.change_pct>=0?"up":"down"}">${t.change_pct>=0?"+":""}${fmt(t.change_pct,1)}%</span>`}</td><td class="r">${t.traders}</td></tr>`).join(""):`<tr><td colspan="6" class="empty">${tSort==="traders"?"No trades in this window yet.":"No token has enough trades (5+) in this window yet."}</td></tr>`}</table></div>
   <div class="note">Change = first to last trade price in the window, fees ignored. Buys = share of trades that were buys. Gainers and buy pressure need 5+ trades.</div></div>
   <div class="card"><h2>Top wallets by estimated PnL <select id="wq" aria-label="Quote token" onchange="walletQuote=this.value;loop()" style="float:right;font-size:12px"><option value="eth"${walletQuote==="eth"?" selected":""}>ETH</option><option value="vibevibe"${walletQuote==="vibevibe"?" selected":""}>VIBEVIBE</option></select></h2>
-  ${wl.length?wl.map(w=>`<div class="row"><span>${walLink(w.trader)} <span class="mut">${w.tokens_traded} ${w.tokens_traded===1?"token":"tokens"}</span></span>${pnl(w.pnl_quote,w.quote)}</div>`).join(""):`<div class="empty">No complete positions yet.</div>`}
+  ${wl.length?wl.map(w=>`<div class="row"><span>${walLink(w.trader)} <span class="mut">${w.positions} ${w.positions===1?"position":"positions"} · ${Math.round(w.win_rate*100)}% wins</span></span>${pnl(w.pnl_quote,w.quote)}</div>`).join(""):`<div class="empty">No complete positions yet.</div>`}
   <div class="note">All-time, ranked within ${walletQuote==="eth"?"ETH":"VIBEVIBE"}-quoted tokens only. Tokens quoted in other tokens aren't ranked because their amounts aren't comparable.</div>
   <div class="note">Left out: ${ex.incomplete_history} positions with missing buy history, ${ex.unknown_quote} with unknown quote token, of ${ex.total_positions} total.</div></div>
  </div>
@@ -130,15 +130,22 @@ async function tokenPage(addr){
   <div class="card"><h2>Biggest buyers seen</h2>${t.holders_seen.map(r=>`<div class="row"><span>${walLink(r.trader)}</span><span class="mut">spent ${fmt(r.spent,3)} · net ${fmt(r.net_tokens,2)}</span></div>`).join("")||`<div class="empty">None yet.</div>`}</div></div>`;
 }
 async function walletPage(addr){
- const w=await api("/api/wallet/"+addr);
+ const w=await api("/api/wallet/"+addr),a=w.activity;
+ const tl=(p)=>p?`${tokLink(p.token,p.symbol)} ${pnl(p.pnl,"")}`:"–";
  $("#app").innerHTML=`<div class="card"><h2>Wallet ${esc(short(w.wallet))}</h2>
- <div class="note"><a href="https://explorer.testnet.chain.robinhood.com/address/${esc(w.wallet)}" target="_blank" rel="noopener">View on explorer</a></div>
- ${w.summary.map(s=>`<div class="row"><span>Estimated PnL (${esc(s.quote)}) over ${s.tokens_traded} tokens</span>${pnl(s.pnl_quote,s.quote)}</div>`).join("")||`<div class="empty">No complete positions to total yet.</div>`}</div>
- <div class="card" style="margin-top:12px"><h2>Positions</h2><div class="scroll"><table><tr><th>Token</th><th class="r">Trades</th><th class="r">Spent</th><th class="r">Received</th><th class="r">PnL</th></tr>
- ${w.positions.map(p=>`<tr><td>${tokLink(p.token,p.symbol)}</td><td class="r">${p.trades}</td><td class="r">${fmt(p.quote_spent,3)}</td><td class="r">${fmt(p.quote_received,3)}</td><td class="r">${p.pnl==null?`<span class="mut" title="Bought before indexing began, or quote token unknown">n/a</span>`:pnl(p.pnl,p.quote)}</td></tr>`).join("")}</table></div></div>
+ <div class="note" style="margin:0 0 8px"><a href="https://explorer.testnet.chain.robinhood.com/address/${esc(w.wallet)}" target="_blank" rel="noopener">View on explorer</a> · ${a.trades} trades indexed${a.first_ts?` · first seen ${ago(a.first_ts)}, last active ${ago(a.last_ts)}`:""}</div>
+ ${w.stats.map(s=>`<div class="stats" style="margin:0 0 8px">
+  <div class="stat"><div class="l">Estimated PnL (${esc(s.quote)})</div><div class="v" style="font-size:18px">${pnl(s.pnl,s.quote)}</div></div>
+  <div class="stat"><div class="l">Win rate</div><div class="v">${Math.round(s.win_rate*100)}%</div><div class="note" style="margin:0">${s.wins} of ${s.positions} positions</div></div>
+  <div class="stat"><div class="l">Best position</div><div class="v" style="font-size:15px">${tl(s.best)}</div></div>
+  <div class="stat"><div class="l">Worst position</div><div class="v" style="font-size:15px">${tl(s.worst)}</div></div></div>`).join("")||`<div class="empty">No complete positions to score yet.</div>`}
+ ${w.excluded?`<div class="note">${w.excluded} of ${w.positions_total} positions aren't scored: the wallet sold tokens whose purchase we never saw (bought before indexing began, or received by transfer), or the quote token is unknown.</div>`:""}</div>
+ ${w.positions.length?`<div class="card" style="margin-top:12px"><h2>Positions</h2><div class="scroll"><table><tr><th>Token</th><th class="r">Trades</th><th class="r">Spent</th><th class="r">Received</th><th class="r">PnL</th></tr>
+ ${w.positions.map(p=>`<tr><td>${tokLink(p.token,p.symbol)}</td><td class="r">${p.trades}</td><td class="r">${fmt(p.quote_spent,3)}</td><td class="r">${fmt(p.quote_received,3)}</td><td class="r">${p.pnl==null?`<span class="mut" title="Bought before indexing began, or quote token unknown">n/a</span>`:pnl(p.pnl,p.quote)}</td></tr>`).join("")}</table></div>${w.positions_truncated?`<div class="note">Showing the 200 most active positions.</div>`:""}</div>`:""}
  ${w.created.length?`<div class="card" style="margin-top:12px"><h2>Tokens created</h2>${w.created.map(c=>`<div class="row"><span>${tokLink(c.token,c.symbol)} <span class="mut">${esc(c.name||"")}</span></span><span class="mut">${ago(c.ts)}</span></div>`).join("")}</div>`:""}`;
 }
 async function render(){
+ if(!/^#\/?$/.test(location.hash))api("/api/overview?hours="+hours()).then(setLive).catch(()=>{});
  const h=location.hash.replace(/^#/,"")||"/",parts=h.split("/");
  document.querySelectorAll("nav a").forEach(a=>a.classList.remove("on"));
  try{

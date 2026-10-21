@@ -152,11 +152,23 @@ def trending(db, hours=24, limit=20, sort="traders", new_only=False):
 QUOTES = {"eth": cfg.ZERO, "vibevibe": cfg.VIBEVIBE_TOKEN}
 
 
+POSITION_PNL = ("quote_received + MAX(tokens_bought - tokens_sold, 0) * COALESCE(last_price, 0) - quote_spent")
+
+
 def wallets(db, limit=20, quote="eth"):
-    """Ranked within one quote token only; amounts in different tokens are not comparable."""
+    """Ranked within one quote token only; amounts in different tokens are not comparable.
+    A position counts as a win when its estimated PnL (realized plus remaining tokens at
+    the last price) is above zero. Only positions with a complete buy history are counted."""
     q = QUOTES.get(quote, cfg.ZERO)
-    return _label(db.q("SELECT * FROM wallet_pnl WHERE trades > 0 AND quote_token = ? "
-                       "ORDER BY pnl_quote DESC LIMIT ?", (q, limit)))
+    return _label(db.q(f"""
+        SELECT p.*, s.positions, s.wins, 1.0 * s.wins / s.positions AS win_rate
+        FROM wallet_pnl p
+        JOIN (SELECT trader, quote_token, COUNT(*) AS positions, SUM(pnl > 0) AS wins
+              FROM (SELECT trader, quote_token, {POSITION_PNL} AS pnl FROM wallet_token_pnl
+                    WHERE complete = 1 AND quote_token = ?)
+              GROUP BY trader, quote_token) s
+          ON s.trader = p.trader AND s.quote_token = p.quote_token
+        WHERE p.trades > 0 AND p.quote_token = ? ORDER BY p.pnl_quote DESC LIMIT ?""", (q, q, limit)))
 
 
 def creators(db, limit=20):
@@ -222,16 +234,28 @@ def token_detail(db, addr):
 
 def wallet_detail(db, addr):
     addr = addr.lower()
-    pos = db.q("SELECT * FROM wallet_token_pnl WHERE trader = ? ORDER BY trades DESC LIMIT 100", (addr,))
-    if not pos:
+    pos = db.q("SELECT * FROM wallet_token_pnl WHERE trader = ? ORDER BY trades DESC LIMIT 200", (addr,))
+    created = db.q("SELECT token, symbol, name, ts FROM tokens WHERE creator = ? ORDER BY ts DESC LIMIT 20", (addr,))
+    if not pos and not created:
         return None
     for p in pos:
         p["pnl"] = (p["quote_received"] + max(p["tokens_bought"] - p["tokens_sold"], 0)
                     * (p["last_price"] or 0) - p["quote_spent"]) if p["complete"] and p["quote_token"] else None
-    return {"wallet": addr, "positions": _label(pos, db),
-            "summary": _label(db.q("SELECT * FROM wallet_pnl WHERE trader = ?", (addr,))),
-            "created": db.q("SELECT token, symbol, name, ts FROM tokens WHERE creator = ? ORDER BY ts DESC LIMIT 20",
-                            (addr,))}
+    _label(pos, db)
+    stats = []
+    for quote in sorted({p["quote_token"] for p in pos if p["pnl"] is not None}):
+        mine = [p for p in pos if p["quote_token"] == quote and p["pnl"] is not None]
+        best = max(mine, key=lambda p: p["pnl"])
+        worst = min(mine, key=lambda p: p["pnl"])
+        wins = sum(1 for p in mine if p["pnl"] > 0)
+        brief = lambda p: {"token": p["token"], "symbol": p["symbol"], "pnl": p["pnl"]}
+        stats.append({"quote_token": quote, "quote": mine[0]["quote"], "positions": len(mine), "wins": wins,
+                      "win_rate": wins / len(mine), "pnl": sum(p["pnl"] for p in mine),
+                      "spent": sum(p["quote_spent"] for p in mine), "best": brief(best), "worst": brief(worst)})
+    span = db.q("SELECT MIN(ts) AS first_ts, MAX(ts) AS last_ts, COUNT(*) AS trades FROM trades WHERE trader = ?", (addr,))[0]
+    return {"wallet": addr, "positions": pos, "stats": stats, "created": created, "activity": span,
+            "excluded": sum(1 for p in pos if p["pnl"] is None),
+            "positions_total": len(pos), "positions_truncated": len(pos) == 200}
 
 
 # ---- HTTP --------------------------------------------------------------------

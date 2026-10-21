@@ -160,6 +160,23 @@ class WebTests(unittest.TestCase):
             self.assertEqual(s, 200)
             self.assertEqual((r["tokens"], r["wallets"]), ([], []), junk)
 
+    def test_wallet_win_rate_and_stats(self):
+        web._cache.clear()
+        s, w = self.j("/api/wallets?quote=eth")
+        alice = next(r for r in w if r["trader"] == ALICE)
+        self.assertEqual((alice["positions"], alice["wins"]), (1, 1))
+        self.assertAlmostEqual(alice["win_rate"], 1.0)
+        s, d = self.j(f"/api/wallet/{ALICE}")
+        st = d["stats"][0]
+        self.assertEqual((st["quote"], st["positions"], st["wins"]), ("ETH", 1, 1))
+        self.assertAlmostEqual(st["pnl"], 0.5)
+        self.assertEqual(st["best"]["token"], TOK_A)
+        self.assertEqual(d["excluded"], 0)
+        s, d = self.j(f"/api/wallet/{BOB}")               # bob: two positions cannot be scored
+        self.assertEqual(d["excluded"], 2)  # TOK_A sold without a seen buy; TOK_X has no known quote token
+        s, d = self.j(f"/api/wallet/{CREATOR}")           # creator who never traded still has a page
+        self.assertEqual((s, d["stats"], len(d["created"])), (200, [], 2))
+
     def test_token_and_wallet_detail(self):
         s, t = self.j(f"/api/token/{TOK_A}")
         self.assertEqual((s, t["symbol"], t["quote"], t["trades"]), (200, "AAA", "ETH", 3))
