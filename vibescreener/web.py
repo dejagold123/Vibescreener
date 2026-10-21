@@ -171,8 +171,43 @@ def wallets(db, limit=20, quote="eth"):
         WHERE p.trades > 0 AND p.quote_token = ? ORDER BY p.pnl_quote DESC LIMIT ?""", (q, q, limit)))
 
 
-def creators(db, limit=20):
-    return report.top_creators(db, limit)
+CREATOR_SORTS = {"traders": "unique_traders DESC, trades DESC",
+                 "hit": "hit_rate DESC, traded DESC",
+                 "launched": "tokens_launched DESC, trades DESC"}
+
+
+def creators(db, limit=20, sort="traders", hours=24):
+    """Creators with how their tokens fared. A token counts as 'up' when its last trade
+    price is above its first (needs 2+ trades) and as 'active' when it traded in the
+    last `hours`. The hit-rate view only ranks creators with 3+ traded tokens."""
+    since = int(time.time()) - hours * 3600
+    order = CREATOR_SORTS.get(sort, CREATOR_SORTS["traders"])
+    having = "HAVING traded >= 3" if sort == "hit" else "HAVING traded >= 1"
+    return db.q(f"""
+        WITH w AS (
+          SELECT token, trader, ts, quote_amt / token_amt AS price,
+                 ROW_NUMBER() OVER (PARTITION BY token ORDER BY block, log_index) AS rn_first,
+                 ROW_NUMBER() OVER (PARTITION BY token ORDER BY block DESC, log_index DESC) AS rn_last
+          FROM trades WHERE token_amt > 0),
+        pt AS (
+          SELECT token, COUNT(*) AS trades, MAX(ts) AS last_ts,
+                 MAX(CASE WHEN rn_first = 1 THEN price END) AS first_price,
+                 MAX(CASE WHEN rn_last = 1 THEN price END) AS last_price
+          FROM w GROUP BY token)
+        SELECT k.creator AS creator, COUNT(*) AS tokens_launched,
+               COUNT(pt.token) AS traded,
+               COALESCE(SUM(pt.trades >= 2 AND pt.last_price > pt.first_price), 0) AS up,
+               COALESCE(SUM(pt.last_ts >= ?), 0) AS active,
+               COALESCE(SUM(pt.trades), 0) AS trades,
+               c.unique_traders AS unique_traders,
+               CASE WHEN COUNT(pt.token) > 0
+                    THEN 1.0 * COALESCE(SUM(pt.trades >= 2 AND pt.last_price > pt.first_price), 0) / COUNT(pt.token)
+               END AS hit_rate
+        FROM tokens k
+        LEFT JOIN pt ON pt.token = k.token
+        JOIN creator_stats c ON c.creator = k.creator
+        GROUP BY k.creator {having}
+        ORDER BY {order} LIMIT ?""", (since, limit))
 
 
 def feed(db, limit=30):
@@ -235,7 +270,8 @@ def token_detail(db, addr):
 def wallet_detail(db, addr):
     addr = addr.lower()
     pos = db.q("SELECT * FROM wallet_token_pnl WHERE trader = ? ORDER BY trades DESC LIMIT 200", (addr,))
-    created = db.q("SELECT token, symbol, name, ts FROM tokens WHERE creator = ? ORDER BY ts DESC LIMIT 20", (addr,))
+    created = db.q("""SELECT token, symbol, name, launched_ts AS ts, trades, traders FROM token_stats
+                      WHERE creator = ? ORDER BY launched_ts DESC LIMIT 20""", (addr,))
     if not pos and not created:
         return None
     for p in pos:
@@ -277,7 +313,8 @@ def route(db_path, path, query):
             quote = (query.get("quote", ["eth"])[0] or "eth").lower()
             return 200, cached(("w", limit, quote), lambda: wallets(db, limit, quote))
         if path == "/api/creators":
-            return 200, cached(("c", limit), lambda: creators(db, limit))
+            sort = query.get("sort", ["traders"])[0]
+            return 200, cached(("c", limit, sort, hours), lambda: creators(db, limit, sort, hours))
         if path == "/api/search":
             return 200, search(db, query.get("q", [""])[0])
         if path == "/api/feed":

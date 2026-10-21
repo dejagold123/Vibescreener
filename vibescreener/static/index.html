@@ -102,11 +102,15 @@ async function home(){
  </div>
  <div class="card"><h2>Live feed</h2>${feedRows(fd)}</div>`;
 }
+let cSort='traders';
 async function creatorsPage(){
- const c=await api("/api/creators?limit=50");
- $("#app").innerHTML=`<div class="card"><h2>Top creators</h2><div class="scroll"><table><tr><th>Creator</th><th class="r">Tokens</th><th class="r">Unique traders</th><th class="r">Trades</th></tr>
- ${c.map(r=>`<tr><td>${walLink(r.creator)}</td><td class="r">${r.tokens_launched}</td><td class="r">${r.unique_traders}</td><td class="r">${r.trades}</td></tr>`).join("")}</table></div>
- <div class="note">Ranked by unique traders across everything they launched.</div></div>`;
+ const c=await api("/api/creators?limit=50&sort="+cSort+"&hours="+hours());
+ const tabs=[["traders","Most traders"],["hit","Best hit rate"],["launched","Most launched"]];
+ $("#app").innerHTML=`<div class="card"><h2>Top creators</h2>
+ <div class="tabs">${tabs.map(([k,l])=>`<button class="tab${cSort===k?" on":""}" onclick="cSort='${k}';loop()">${l}</button>`).join("")}</div>
+ <div class="scroll"><table><tr><th>Creator</th><th class="r">Launched</th><th class="r">Traded</th><th class="r">Up</th><th class="r">Hit rate</th><th class="r">Active ${hours()}h</th><th class="r">Traders</th></tr>
+ ${c.length?c.map(r=>`<tr><td>${walLink(r.creator)}</td><td class="r">${r.tokens_launched}</td><td class="r">${r.traded}</td><td class="r">${r.up}</td><td class="r">${r.hit_rate==null?"–":Math.round(r.hit_rate*100)+"%"}</td><td class="r">${r.active}</td><td class="r">${r.unique_traders}</td></tr>`).join(""):`<tr><td colspan="7" class="empty">${cSort==="hit"?"No creator has 3+ traded tokens yet.":"No creators with trades yet."}</td></tr>`}</table></div>
+ <div class="note">Traded = launched tokens with at least one indexed trade. Up = last trade price above the first (2+ trades). Hit rate = up / traded, for creators with 3+ traded tokens. Active = traded in the window. Traders = unique wallets across all their tokens. Only trades from when indexing began are counted.</div></div>`;
 }
 function chart(series){
  if(series.length<2)return`<div class="empty">Not enough trades for a chart yet.</div>`;
@@ -142,7 +146,7 @@ async function walletPage(addr){
  ${w.excluded?`<div class="note">${w.excluded} of ${w.positions_total} positions aren't scored: the wallet sold tokens whose purchase we never saw (bought before indexing began, or received by transfer), or the quote token is unknown.</div>`:""}</div>
  ${w.positions.length?`<div class="card" style="margin-top:12px"><h2>Positions</h2><div class="scroll"><table><tr><th>Token</th><th class="r">Trades</th><th class="r">Spent</th><th class="r">Received</th><th class="r">PnL</th></tr>
  ${w.positions.map(p=>`<tr><td>${tokLink(p.token,p.symbol)}</td><td class="r">${p.trades}</td><td class="r">${fmt(p.quote_spent,3)}</td><td class="r">${fmt(p.quote_received,3)}</td><td class="r">${p.pnl==null?`<span class="mut" title="Bought before indexing began, or quote token unknown">n/a</span>`:pnl(p.pnl,p.quote)}</td></tr>`).join("")}</table></div>${w.positions_truncated?`<div class="note">Showing the 200 most active positions.</div>`:""}</div>`:""}
- ${w.created.length?`<div class="card" style="margin-top:12px"><h2>Tokens created</h2>${w.created.map(c=>`<div class="row"><span>${tokLink(c.token,c.symbol)} <span class="mut">${esc(c.name||"")}</span></span><span class="mut">${ago(c.ts)}</span></div>`).join("")}</div>`:""}`;
+ ${w.created.length?`<div class="card" style="margin-top:12px"><h2>Tokens created</h2>${w.created.map(c=>`<div class="row"><span>${tokLink(c.token,c.symbol)} <span class="mut">${esc(c.name||"")}</span></span><span class="mut">${c.trades} trades · ${c.traders} traders · ${ago(c.ts)}</span></div>`).join("")}</div>`:""}`;
 }
 async function render(){
  if(!/^#\/?$/.test(location.hash))api("/api/overview?hours="+hours()).then(setLive).catch(()=>{});

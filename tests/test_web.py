@@ -139,6 +139,37 @@ class WebTests(unittest.TestCase):
         self.assertAlmostEqual(b[0]["buy_share"], 1.0)
         rd.close()
 
+    def test_creator_quality(self):
+        path = os.path.join(self.dir, "c.db")
+        db = DB(path)
+        now = int(time.time())
+        c1, c2 = "0x" + "e1" * 20, "0x" + "e2" * 20
+        toks = [("0x" + "f%d" % i + "0" * 38, c1 if i < 4 else c2) for i in range(5)]
+        launches = []
+        for t, c in toks:
+            l = launch(t, "T", cfg.ZERO, now, 1)
+            l["creator"] = c
+            launches.append(l)
+        rows, n = [], 1
+        for i, (t, c) in enumerate(toks):
+            if i == 3:
+                continue                                  # a launched token nobody traded
+            rising = i in (0, 1, 4)                       # 0,1 rise (c1); 2 falls (c1); 4 rises (c2)
+            for j in range(2):
+                price = (1.0 + j) if rising else (2.0 - j)
+                rows.append(trade(n, "buy", ALICE, t, 10, 10 * price, 10 + n))
+                n += 1
+        db.save(launches, rows, {b: now - 60 for b in range(1, 40)})
+        rd = web.ReadDB(path)
+        by = {r["creator"]: r for r in web.creators(rd, 10)}
+        a = by[c1]
+        self.assertEqual((a["tokens_launched"], a["traded"], a["up"], a["active"]), (4, 3, 2, 3))
+        self.assertAlmostEqual(a["hit_rate"], 2 / 3)
+        self.assertEqual((by[c2]["tokens_launched"], by[c2]["traded"], by[c2]["up"]), (1, 1, 1))
+        self.assertEqual([r["creator"] for r in web.creators(rd, 10, sort="hit")], [c1])   # c2 has <3 traded
+        self.assertEqual(web.creators(rd, 10, sort="nonsense")[0]["creator"], web.creators(rd, 10)[0]["creator"])
+        rd.close()
+
     def test_trending_endpoint_params(self):
         for q in ("sort=change", "sort=buys&new=1", "sort=%27%3B--", "hours=banana&sort=traders"):
             s, r = self.j("/api/trending?" + q)
