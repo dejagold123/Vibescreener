@@ -16,6 +16,7 @@ them in the service's Variables tab instead of editing code:
     VIBESCREENER_META   set to 0 to turn token metadata fetching off
     LLM_API_KEY         key for an OpenAI-compatible AI provider (or OPENROUTER_API_KEY); enables AI wording
     LLM_BASE_URL / LLM_MODEL   provider URL (default OpenRouter) and model name(s), comma separated
+    ASK_FREE_PER_DAY / ASK_GLOBAL_PER_DAY   free questions per visitor and in total per day (default 5 / 40)
     BRIEF_EVERY_HOURS   how often the market brief is rewritten (default 3)
 """
 import os
@@ -108,6 +109,12 @@ def _float(env, name, default, lo, hi):
 def brief_hours(env=None):
     env = os.environ if env is None else env
     return _float(env, "BRIEF_EVERY_HOURS", 3.0, 0.5, 48.0)
+
+
+def ask_limits(env=None):
+    """Daily caps for the free "Ask" box: per visitor, and for the whole site (protects the AI quota)."""
+    env = os.environ if env is None else env
+    return (int(_float(env, "ASK_FREE_PER_DAY", 5, 0, 1000)), int(_float(env, "ASK_GLOBAL_PER_DAY", 40, 1, 100000)))
 
 
 def web_port(env=None):

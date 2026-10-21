@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS token_meta(
   status TEXT, attempts INTEGER, next_try INTEGER);
 CREATE TABLE IF NOT EXISTS briefs(
   id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER, text TEXT, facts TEXT, source TEXT, model TEXT);
+CREATE TABLE IF NOT EXISTS ask_usage(day TEXT, key TEXT, n INTEGER, PRIMARY KEY(day, key));
 CREATE INDEX IF NOT EXISTS trades_trader ON trades(trader);
 CREATE INDEX IF NOT EXISTS trades_token ON trades(token, block);
 CREATE INDEX IF NOT EXISTS tokens_creator ON tokens(creator);

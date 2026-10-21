@@ -92,6 +92,15 @@ th.tk1{left:0;z-index:2}
 .brief .fx{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px 18px;margin-top:8px}
 .brief .fx h3{margin:0 0 3px;font-size:12px;color:var(--muted);font-weight:500}
 .brief .fx div div{font-size:12.5px;padding:2px 0}
+.ask textarea{width:100%;min-height:84px;resize:vertical;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:10px;font:inherit}
+.ask .chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.ask .chips button{background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:3px 11px;cursor:pointer;color:var(--muted);font-size:12.5px}
+.ask .chips button:hover{color:var(--text)}
+.ask .go{background:var(--accent);color:var(--bg);border:0;border-radius:8px;padding:8px 18px;font-weight:600;cursor:pointer}
+.ask .go:disabled{opacity:.55;cursor:wait}
+.ans{white-space:pre-wrap;word-break:break-word;line-height:1.6;max-width:80ch}
+.kvn{padding-left:12px;border-left:1px solid var(--line);margin:2px 0}
+.err{color:var(--down)}
 .desc{white-space:pre-wrap;word-break:break-word;color:var(--muted);font-size:13px;margin:0 0 8px}
 @media(max-width:640px){.bar{flex-wrap:wrap;gap:8px}.search{order:3;flex:1 1 100%;max-width:none}.right{margin-left:auto}.brand{font-size:16px}.thead .px{font-size:22px}}
 </style>
@@ -99,7 +108,7 @@ th.tk1{left:0;z-index:2}
 <body>
 <div class="top"><div class="bar">
   <a class="brand" href="#/">Vibe<i>Screener</i></a>
-  <nav class="nav"><a href="#/" id="n-home">Tokens</a><a href="#/wallets" id="n-wallets">Wallets</a><a href="#/creators" id="n-creators">Creators</a></nav>
+  <nav class="nav"><a href="#/" id="n-home">Tokens</a><a href="#/wallets" id="n-wallets">Wallets</a><a href="#/creators" id="n-creators">Creators</a><a href="#/ask" id="n-ask">Ask</a></nav>
   <div class="search"><input id="q" type="search" placeholder="Search token, symbol or wallet address" autocomplete="off" aria-label="Search"><div id="sres" hidden></div></div>
   <div class="right"><span id="live" class="pill">connecting</span><button class="ib" id="theme" aria-label="Switch theme">Theme</button></div>
 </div></div>
@@ -218,7 +227,7 @@ function tpane(t){
 async function tokenPage(addr){
  const t=await api("/api/token/"+addr);T.t=t;const st=t.stats||{w:{},ch:{}},d=st.w["24h"]||{txns:0,buys:0,sells:0,volume:0,buy_volume:0,makers:0};
  const socials=Object.entries(t.socials||{}).filter(([k,v])=>/^https?:\/\//i.test(v)).map(([k,v])=>`<a href="${esc(v)}" target="_blank" rel="noopener noreferrer nofollow">${esc(k)}</a>`).join(" · ");
- $("#app").innerHTML=`<div class="thead">${img(t.image_urls,48)}<div><h1 style="font-size:20px">${esc(t.symbol||short(t.token))} <span class="mut" style="font-weight:400;font-size:14px">${esc(t.name||"")}</span></h1><div class="sm mut">${esc(t.quote)}${t.quote_is_token?" (token)":""} · <a href="${EXP}/address/${esc(t.token)}" target="_blank" rel="noopener">${esc(short(t.token))}</a> <button class="ib sm" style="padding:0 6px" onclick="navigator.clipboard&&navigator.clipboard.writeText('${esc(t.token)}');this.textContent='Copied'">Copy</button></div></div>
+ $("#app").innerHTML=`<div class="thead">${img(t.image_urls,48)}<div><h1 style="font-size:20px">${esc(t.symbol||short(t.token))} <span class="mut" style="font-weight:400;font-size:14px">${esc(t.name||"")}</span></h1><div class="sm mut">${esc(t.quote)}${t.quote_is_token?" (token)":""} · <a href="${EXP}/address/${esc(t.token)}" target="_blank" rel="noopener">${esc(short(t.token))}</a> <button class="ib sm" style="padding:0 6px" onclick="navigator.clipboard&&navigator.clipboard.writeText('${esc(t.token)}');this.textContent='Copied'">Copy</button> <button class="ib sm" style="padding:0 6px" onclick="askPrefill('What is going on with ${esc(t.token)}?')">Ask AI</button></div></div>
   <div class="px num">${fmtPrice(t.last_price)} <span class="sm mut">${esc(t.quote)}</span></div>
   <div class="chs">${["5m","1h","6h","24h"].map(k=>`<div><small>${k}</small>${chg(st.ch[k])}</div>`).join("")}</div></div>
  <div class="tgrid"><section><div class="card"><div class="filters" style="margin-bottom:6px"><div class="seg" id="ints">${[[60,"1m"],[300,"5m"],[900,"15m"],[3600,"1h"]].map(([v,l])=>`<button data-v="${v}" class="${T.interval===v?"on":""}" onclick="setInt('${addr}',${v})">${l}</button>`).join("")}</div><span class="sm mut">Price per trade, ${esc(t.quote)}. Fees ignored.</span></div><div id="chart"></div></div>
@@ -256,7 +265,7 @@ async function walletPage(addr){
  const w=await api("/api/wallet/"+addr),a=w.activity;
  const tl=p=>p?`${tokLink(p.token,p.symbol)} ${pnl(p.pnl,"")}`:"–";
  $("#app").innerHTML=`<div class="card"><h1 style="font-size:18px">Wallet <span class="num">${esc(short(w.wallet))}</span></h1>
- <div class="note" style="margin:2px 0 10px"><a href="${EXP}/address/${esc(w.wallet)}" target="_blank" rel="noopener">View on explorer</a> · ${a.trades} trades indexed${a.first_ts?` · first seen ${ago(a.first_ts)}, last active ${ago(a.last_ts)}`:""}</div>
+ <div class="note" style="margin:2px 0 10px"><a href="${EXP}/address/${esc(w.wallet)}" target="_blank" rel="noopener">View on explorer</a> · <a href="#/ask" onclick="AK.q='Is ${esc(w.wallet)} a good wallet?';AK.res=null">Ask AI</a> · ${a.trades} trades indexed${a.first_ts?` · first seen ${ago(a.first_ts)}, last active ${ago(a.last_ts)}`:""}</div>
  ${w.stats.map(s=>`<div class="stats">
   <div class="stat"><div class="l">Estimated PnL (${esc(s.quote)})</div><div class="v">${pnl(s.pnl,s.quote)}</div></div>
   <div class="stat"><div class="l">Win rate</div><div class="v">${Math.round(s.win_rate*100)}%</div><div class="sm mut">${s.wins} of ${s.positions} positions</div></div>
@@ -267,6 +276,37 @@ async function walletPage(addr){
  ${w.positions.map(p=>`<tr style="cursor:default"><td class="l">${tokLink(p.token,p.symbol)}</td><td class="num">${p.trades}</td><td class="num">${fmtC(p.quote_spent)}</td><td class="num">${fmtC(p.quote_received)}</td><td>${p.pnl==null?`<span class="mut" title="Bought before indexing began, or quote token unknown">n/a</span>`:pnl(p.pnl,p.quote)}</td></tr>`).join("")}</tbody></table></div>${w.positions_truncated?`<div class="note">Showing the 200 most active positions.</div>`:""}</div>`:""}
  ${w.created.length?`<div class="card"><h2>Tokens created</h2>${w.created.map(c=>`<div class="rowl"><span>${tokLink(c.token,c.symbol)} <span class="mut">${esc(c.name||"")}</span></span><span class="mut sm">${c.trades} trades · ${c.traders} traders · ${ago(c.ts)}</span></div>`).join("")}</div>`:""}`;
 }
+
+/* ---------- ask ---------- */
+const AK={q:"",res:null,busy:false,err:null,quota:null};
+function kvHtml(o){if(o==null)return"";if(typeof o!=="object")return esc(o);
+ return(Array.isArray(o)?o.map((v,i)=>[i+1,v]):Object.entries(o)).map(([k,v])=>typeof v==="object"&&v!==null?`<div><span class="mut">${esc(String(k).replace(/_/g," "))}</span><div class="kvn">${kvHtml(v)}</div></div>`:`<div class="num"><span class="mut">${esc(String(k).replace(/_/g," "))}</span> ${esc(v)}</div>`).join("")}
+function askPrefill(q){AK.q=q;AK.res=null;AK.err=null;location.hash="#/ask"}
+function askView(){
+ const qt=AK.quota,left=qt?qt.free_left:null;
+ $("#app").innerHTML=`<div class="layout"><section class="ask" style="max-width:820px"><div class="card"><h1 style="font-size:18px;margin-bottom:4px">Ask VibeScreener</h1>
+ <div class="sm mut" style="margin-bottom:10px">Ask about a token, a wallet or the market. We look up the figures from our indexed data and an AI writes the answer from them; if it can't stick to the data, you get the plain figures instead. Not financial advice.</div>
+ <textarea id="aq" maxlength="300" placeholder="For example: What's moving today? Or paste a token or wallet address.">${esc(AK.q)}</textarea>
+ <div class="chips">${["What's happening on vibe/vibe today?","Which tokens have the most buyers right now?","Is this wallet any good? 0x…"].map(x=>`<button onclick="AK.q=this.textContent;askView()">${esc(x)}</button>`).join("")}</div>
+ <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><button class="go" id="ago" ${AK.busy?"disabled":""} onclick="askSend()">${AK.busy?"Thinking…":"Ask"}</button>
+ <span class="sm mut">${left==null?"":left>0?left+" free question"+(left===1?"":"s")+" left today":"No free questions left today"}</span></div>
+ ${AK.err?`<div class="err sm" style="margin-top:8px" role="alert">${esc(AK.err)}</div>`:""}</div>
+ ${AK.res?`<div class="card"><div class="sm mut" style="margin-bottom:6px">${AK.res.source==="ai"?"Written by AI from the data below":"Plain summary of the data (the AI couldn't be used or didn't stay within the figures)"}</div>
+ <div class="ans">${esc(AK.res.answer)}</div><details style="margin-top:8px"><summary class="sm" style="cursor:pointer;color:var(--accent)">Show the data it used</summary><div class="sm" style="margin-top:6px">${kvHtml(AK.res.data)}</div></details></div>`:""}</section></div>`;
+ const ta=$("#aq");ta&&ta.addEventListener("input",()=>{AK.q=ta.value});
+}
+async function askSend(){
+ const q=($("#aq").value||"").trim();AK.q=q;
+ if(q.length<3){AK.err="Type a question of at least a few characters.";askView();return}
+ AK.busy=true;AK.err=null;askView();
+ try{const r=await fetch("/api/ask",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({question:q})});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok){AK.err=j.error||"Something went wrong. Try again.";if(r.status===429&&AK.quota)AK.quota.free_left=0}
+  else{AK.res=j;AK.quota=j.quota}}
+ catch(e){AK.err="Couldn't reach the server. Try again."}
+ AK.busy=false;askView();
+}
+async function askPage(){AK.quota=await api("/api/ask/quota").catch(()=>AK.quota);askView()}
 
 /* ---------- search ---------- */
 let sTimer=null,sSeq=0;const sClose=()=>{$("#sres").hidden=true};
@@ -289,13 +329,14 @@ async function render(){
   if(p[1]==="token"&&p[2])await tokenPage(p[2]);
   else if(p[1]==="wallet"&&p[2])await walletPage(p[2]);
   else if(p[1]==="wallets"){$("#n-wallets").classList.add("on");await walletsPage()}
+  else if(p[1]==="ask"){$("#n-ask").classList.add("on");if(!AK.busy)await askPage()}
   else if(p[1]==="creators"){$("#n-creators").classList.add("on");await creatorsPage()}
   else{$("#n-home").classList.add("on");await home()}
  }catch(e){$("#app").innerHTML=`<div class="card"><div class="empty">${esc(e.message==="404"||e.message==="not found"?"Nothing indexed for that address yet.":"Data isn't ready yet ("+e.message+"). It retries automatically.")}</div></div>`}
 }
 let lastHash=null;
 function loop(){clearTimeout(timer);const y=window.scrollY,same=lastHash===location.hash;lastHash=location.hash;
- render().finally(()=>{if(same)window.scrollTo(0,y);timer=setTimeout(loop,8000)})}
+ render().finally(()=>{if(same)window.scrollTo(0,y);if(!/^#\/ask/.test(location.hash))timer=setTimeout(loop,8000)})}
 window.addEventListener("hashchange",()=>{window.scrollTo(0,0);loop()});
 let rz=null;window.addEventListener("resize",()=>{clearTimeout(rz);rz=setTimeout(drawChart,150)});
 loop();

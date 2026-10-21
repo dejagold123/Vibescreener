@@ -15,7 +15,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from . import config as cfg
-from . import brief, meta, report
+from . import ask, brief, meta, report
 
 STATIC = os.path.join(os.path.dirname(__file__), "static")
 ADDR = re.compile(r"^0x[0-9a-fA-F]{40}$")
@@ -35,6 +35,14 @@ class ReadDB:
 
     def close(self):
         self.conn.close()
+
+
+class WriteDB(ReadDB):
+    """Handle for the few things visitors cause us to record (daily question counters)."""
+
+    def __init__(self, path):
+        self.conn = sqlite3.connect(path, timeout=30)
+        self.conn.row_factory = sqlite3.Row
 
 
 _cache = {}
@@ -475,6 +483,12 @@ def route(db_path, path, query):
             if not ADDR.match(m.group(1)):
                 return 400, {"error": "address must be 0x followed by 40 hex characters"}
             return 200, candles(db, m.group(1), _num(query.get("interval", [None])[0], 300, 60, 3600))
+        if path == "/api/ask/quota":
+            wdb = WriteDB(db_path)
+            try:
+                return 200, ask.quota(wdb, query.get("_ip", ["unknown"])[0])
+            finally:
+                wdb.close()
         if path == "/api/brief":
             b = brief.latest(db)
             return 200, {"brief": b, "now": int(time.time())}
@@ -497,17 +511,75 @@ def route(db_path, path, query):
         db.close()
 
 
+_hits, _hits_lock = {}, threading.Lock()
+
+
+def throttled(ip, limit=12, per=60.0, now=None):
+    """True when this visitor asked too many questions in the last minute."""
+    now = now or time.time()
+    with _hits_lock:
+        recent = [t for t in _hits.get(ip, []) if now - t < per]
+        recent.append(now)
+        _hits[ip] = recent
+        if len(_hits) > 5000:                                  # keep memory bounded
+            _hits.clear()
+        return len(recent) > limit
+
+
+def post_ask(db_path, body, ip):
+    """POST /api/ask -> (status, payload). Never raises."""
+    try:
+        data = json.loads(body or b"{}")
+        if not isinstance(data, dict):
+            raise ValueError
+    except ValueError:
+        return 400, {"error": "Send JSON like {\"question\": \"...\"}."}
+    if throttled(ip):
+        return 429, {"error": "Slow down a little, then try again."}
+    wdb, rdb = WriteDB(db_path), ReadDB(db_path)
+    try:
+        return 200, ask.answer(wdb, rdb, data.get("question"), ip)
+    except ask.AskError as e:
+        return e.status, {"error": str(e)}
+    except sqlite3.OperationalError as e:
+        return 503, {"error": f"data not ready ({e})"}
+    finally:
+        wdb.close()
+        rdb.close()
+
+
+def client_ip(headers, peer):
+    fwd = (headers.get("X-Forwarded-For") or "").split(",")[0].strip()
+    return fwd or peer
+
+
 def make_handler(db_path):
     class Handler(BaseHTTPRequestHandler):
-        def _send(self, status, body, ctype):
+        def _send(self, status, body, ctype, cors=True):
             self.send_response(status)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
-            self.send_header("Access-Control-Allow-Origin", "*")
+            if cors:
+                self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(body)
+
+        def do_POST(self):
+            u = urlparse(self.path)
+            try:
+                size = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                size = -1
+            if size < 0 or size > 4096:
+                return self._send(413, b'{"error": "too large"}', "application/json", cors=False)
+            body = self.rfile.read(size)
+            ip = client_ip(self.headers, self.client_address[0])
+            if u.path == "/api/ask":
+                status, payload = post_ask(db_path, body, ip)
+                return self._send(status, json.dumps(payload).encode(), "application/json", cors=False)
+            self._send(404, b'{"error": "unknown endpoint"}', "application/json", cors=False)
 
         def do_GET(self):
             u = urlparse(self.path)
@@ -517,7 +589,9 @@ def make_handler(db_path):
             if u.path == "/health":
                 return self._send(200, b"ok", "text/plain")
             if u.path.startswith("/api/"):
-                status, payload = route(db_path, u.path, parse_qs(u.query))
+                q = parse_qs(u.query)
+                q["_ip"] = [client_ip(self.headers, self.client_address[0])]
+                status, payload = route(db_path, u.path, q)
                 return self._send(status, json.dumps(payload).encode(), "application/json")
             self._send(404, b"not found", "text/plain")
 
