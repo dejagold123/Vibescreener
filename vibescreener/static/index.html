@@ -278,7 +278,40 @@ async function walletPage(addr){
 }
 
 /* ---------- ask ---------- */
-const AK={q:"",res:null,busy:false,err:null,quota:null};
+const AK={q:"",res:null,busy:false,err:null,quota:null,cfg:null,wallet:null,bal:null,sess:store.get("vs-session",""),cerr:null,cbusy:false};
+const authH=()=>AK.sess?{Authorization:"Bearer "+AK.sess}:{};
+function creditsHtml(){const c=AK.cfg;if(!c||!c.enabled)return"";
+ const copy=`navigator.clipboard&&navigator.clipboard.writeText('${esc(c.treasury)}')`;
+ return`<div class="card"><h2 style="font-size:15px;margin-bottom:4px">Credits</h2>
+ <div class="sm mut" style="margin-bottom:8px">After your free questions, each question costs ${esc(c.price)} of the VibeScreener token (testnet, no real value). Failed answers are refunded automatically.</div>
+ ${AK.wallet?`<div class="num sm">Signed in as <b>${esc(AK.wallet.slice(0,6))}…${esc(AK.wallet.slice(-4))}</b> · balance <b>${esc(AK.bal==null?"?":AK.bal)}</b> · <a href="#/ask" onclick="creditsOut();return false">sign out</a></div>
+ <div class="sm" style="margin-top:8px">To add credits, send the token <span class="mut">(only this token, only on Robinhood Chain Testnet)</span> from <b>this wallet</b> to:</div>
+ <div class="num sm" style="word-break:break-all;margin:4px 0">${esc(c.treasury)} <a href="#/ask" onclick="${copy};return false">copy</a></div>
+ <div class="sm mut">Credits appear within about a minute of the transfer confirming. Tokens sent from another wallet are credited to that wallet.</div>`
+ :`<button class="go" ${AK.cbusy?"disabled":""} onclick="creditsIn()">${AK.cbusy?"Waiting for wallet…":"Connect wallet"}</button>
+ <span class="sm mut" style="margin-left:8px">Signing is free and can't move your funds.</span>`}
+ ${AK.cerr?`<div class="err sm" style="margin-top:8px" role="alert">${esc(AK.cerr)}</div>`:""}</div>`}
+async function creditsIn(){
+ AK.cerr=null;
+ if(!window.ethereum){AK.cerr="No browser wallet found. Open this page in a wallet browser or install a wallet extension such as MetaMask.";askView();return}
+ AK.cbusy=true;askView();
+ try{const [w]=await window.ethereum.request({method:"eth_requestAccounts"});
+  const n=await api("/api/auth/nonce?wallet="+encodeURIComponent(w));
+  const hex="0x"+Array.from(new TextEncoder().encode(n.message),b=>b.toString(16).padStart(2,"0")).join("");
+  const sig=await window.ethereum.request({method:"personal_sign",params:[hex,w]});
+  const r=await fetch("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({wallet:w,signature:sig})});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error(j.error||"Sign-in failed");
+  AK.sess=j.session;store.set("vs-session",j.session);AK.wallet=j.wallet;AK.bal=j.balance}
+ catch(e){AK.cerr=e&&e.code===4001?"Sign-in cancelled.":(e&&e.message)||"Sign-in failed."}
+ AK.cbusy=false;askView();
+}
+function creditsOut(){AK.sess="";AK.wallet=null;AK.bal=null;store.set("vs-session","");askView()}
+async function creditsLoad(){
+ AK.cfg=await api("/api/credits/config").catch(()=>null);
+ if(AK.cfg&&AK.cfg.enabled&&AK.sess){
+  try{const r=await fetch("/api/credits/balance",{headers:authH()});
+   if(r.ok){const j=await r.json();AK.wallet=j.wallet;AK.bal=j.balance}else creditsOut()}catch(e){}}}
 function kvHtml(o){if(o==null)return"";if(typeof o!=="object")return esc(o);
  return(Array.isArray(o)?o.map((v,i)=>[i+1,v]):Object.entries(o)).map(([k,v])=>typeof v==="object"&&v!==null?`<div><span class="mut">${esc(String(k).replace(/_/g," "))}</span><div class="kvn">${kvHtml(v)}</div></div>`:`<div class="num"><span class="mut">${esc(String(k).replace(/_/g," "))}</span> ${esc(v)}</div>`).join("")}
 function askPrefill(q){AK.q=q;AK.res=null;AK.err=null;location.hash="#/ask"}
@@ -291,6 +324,7 @@ function askView(){
  <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><button class="go" id="ago" ${AK.busy?"disabled":""} onclick="askSend()">${AK.busy?"Thinking…":"Ask"}</button>
  <span class="sm mut">${left==null?"":left>0?left+" free question"+(left===1?"":"s")+" left today":"No free questions left today"}</span></div>
  ${AK.err?`<div class="err sm" style="margin-top:8px" role="alert">${esc(AK.err)}</div>`:""}</div>
+ ${creditsHtml()}
  ${AK.res?`<div class="card"><div class="sm mut" style="margin-bottom:6px">${AK.res.source==="ai"?"Written by AI from the data below":"Plain summary of the data (the AI couldn't be used or didn't stay within the figures)"}</div>
  <div class="ans">${esc(AK.res.answer)}</div><details style="margin-top:8px"><summary class="sm" style="cursor:pointer;color:var(--accent)">Show the data it used</summary><div class="sm" style="margin-top:6px">${kvHtml(AK.res.data)}</div></details></div>`:""}</section></div>`;
  const ta=$("#aq");ta&&ta.addEventListener("input",()=>{AK.q=ta.value});
@@ -299,14 +333,14 @@ async function askSend(){
  const q=($("#aq").value||"").trim();AK.q=q;
  if(q.length<3){AK.err="Type a question of at least a few characters.";askView();return}
  AK.busy=true;AK.err=null;askView();
- try{const r=await fetch("/api/ask",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({question:q})});
+ try{const r=await fetch("/api/ask",{method:"POST",headers:{"Content-Type":"application/json",...authH()},body:JSON.stringify({question:q})});
   const j=await r.json().catch(()=>({}));
   if(!r.ok){AK.err=j.error||"Something went wrong. Try again.";if(r.status===429&&AK.quota)AK.quota.free_left=0}
-  else{AK.res=j;AK.quota=j.quota}}
+  else{AK.res=j;AK.quota=j.quota;if(j.credits)AK.bal=j.credits.balance}}
  catch(e){AK.err="Couldn't reach the server. Try again."}
  AK.busy=false;askView();
 }
-async function askPage(){AK.quota=await api("/api/ask/quota").catch(()=>AK.quota);askView()}
+async function askPage(){AK.quota=await api("/api/ask/quota").catch(()=>AK.quota);await creditsLoad();askView()}
 
 /* ---------- search ---------- */
 let sTimer=null,sSeq=0;const sClose=()=>{$("#sres").hidden=true};

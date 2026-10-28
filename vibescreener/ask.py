@@ -185,10 +185,13 @@ def answer(write_db, read_db, question, ip, session=None, env=None, now=None, sp
     paid = False
     if _count(write_db, "all", now) >= glob:
         raise AskError("The daily question limit for the whole site has been reached. Try again tomorrow.", 429)
-    if spend and spend[0]():
+    if _count(write_db, vkey, now) < free:
+        pass                                                   # free allowance first
+    elif spend and spend[0]():
         paid = True
-    elif _count(write_db, vkey, now) >= free:
-        raise AskError(f"You've used your {free} free questions for today. They reset at midnight UTC.", 429)
+    else:
+        raise AskError(f"You've used your {free} free questions for today. They reset at midnight UTC."
+                       + (" Add credits to keep asking." if spend else ""), 429)
     ctx = retrieve(read_db, q)
     data = {k: v for k, v in ctx.items() if k != "kind"}
     text, source, model = None, "data", None

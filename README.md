@@ -41,6 +41,17 @@ Options: `--rpc <url>` to use your own node, `--db <file>`.
 | `IPFS_GATEWAY` | optional preferred IPFS gateway for token images and descriptions |
 | `VIBESCREENER_META` | set to `0` to turn token metadata fetching off |
 | `PORT` / `VIBESCREENER_PORT` | dashboard port (Railway sets `PORT`; default 8000) |
+| `LLM_API_KEY` (or `OPENROUTER_API_KEY`) | key for the AI market brief and Ask box. Without it both still work using plain data summaries |
+| `LLM_BASE_URL` | any OpenAI-compatible endpoint (default `https://openrouter.ai/api/v1`) |
+| `LLM_MODEL` | comma list tried in order (default: two free OpenRouter models) |
+| `BRIEF_EVERY_HOURS` | how often the market brief is regenerated (default 3) |
+| `ASK_FREE_PER_DAY` / `ASK_GLOBAL_PER_DAY` | free questions per visitor (default 5) and for the whole site (default 40) per day |
+| `TOKEN_ADDRESS` + `TREASURY_ADDRESS` | turn on paying for extra questions with your token; both must be set |
+| `ASK_PRICE` | token cost of one paid question (default 1) |
+
+Set keys in the Railway Variables tab, never in chat or in the repo.
+
+**AI and credits, briefly.** The AI never sees the database: the server looks up the figures, the model only phrases them, and any answer containing a number that was not in those figures is thrown away for a plain summary. Credits: visitors sign in by signing a free message with their wallet, send your token to `TREASURY_ADDRESS`, and the server credits the sender after reading the transfer from the explorer. Free questions are used first. The only thing the web server writes is counters, sessions and balances; indexed chain data cannot be changed from the web.
 
 Never commit keys to the repo. Deploying: see [DEPLOY.md](DEPLOY.md).
 

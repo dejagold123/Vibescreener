@@ -25,6 +25,11 @@ CREATE TABLE IF NOT EXISTS token_meta(
 CREATE TABLE IF NOT EXISTS briefs(
   id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER, text TEXT, facts TEXT, source TEXT, model TEXT);
 CREATE TABLE IF NOT EXISTS ask_usage(day TEXT, key TEXT, n INTEGER, PRIMARY KEY(day, key));
+CREATE TABLE IF NOT EXISTS auth_nonces(wallet TEXT PRIMARY KEY, nonce TEXT, expires INTEGER);
+CREATE TABLE IF NOT EXISTS sessions(token_hash TEXT PRIMARY KEY, wallet TEXT, expires INTEGER);
+CREATE TABLE IF NOT EXISTS credits(wallet TEXT PRIMARY KEY, micro INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS deposits(
+  tx TEXT, log_index INTEGER, wallet TEXT, micro INTEGER, ts INTEGER, PRIMARY KEY(tx, log_index));
 CREATE INDEX IF NOT EXISTS trades_trader ON trades(trader);
 CREATE INDEX IF NOT EXISTS trades_token ON trades(token, block);
 CREATE INDEX IF NOT EXISTS tokens_creator ON tokens(creator);

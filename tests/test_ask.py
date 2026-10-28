@@ -99,19 +99,29 @@ class AnswerTests(Base):
             ask.answer(self.w, self.r, "AAA?", "10.0.0.99", session=Session(Resp(200, GOOD)), env=LIMITS)
         self.assertIn("whole site", str(cm.exception))
 
-    def test_paid_questions_skip_the_free_allowance_and_refund_on_failure(self):
+    def test_free_allowance_is_used_before_credits(self):
+        taken = []
+        spend = (lambda: taken.append(1) or True, lambda: None)
+        for _ in range(2):
+            self.go(Session(Resp(200, GOOD)), spend=spend)
+        self.assertEqual(taken, [])
+        out = self.go(Session(Resp(200, GOOD)), spend=spend)
+        self.assertEqual((out["source"], len(taken)), ("ai", 1))
+
+    def test_paid_question_is_refunded_when_ai_fails(self):
         taken, refunded = [], []
         spend = (lambda: taken.append(1) or True, lambda: refunded.append(1))
-        out = self.go(Session(Resp(200, GOOD)), spend=spend)
-        self.assertEqual((out["source"], len(taken), len(refunded), out["quota"]["free_left"]), ("ai", 1, 0, 2))
-        out = self.go(Session(Resp(500), Resp(500)), spend=spend)
-        self.assertEqual((out["source"], len(taken), len(refunded)), ("data", 2, 1))
-
-    def test_free_visitor_over_the_limit_can_still_pay(self):
         for _ in range(2):
             self.go(Session(Resp(200, GOOD)))
-        out = self.go(Session(Resp(200, GOOD)), spend=(lambda: True, lambda: None))
-        self.assertEqual(out["source"], "ai")
+        out = self.go(Session(Resp(500), Resp(500)), spend=spend)
+        self.assertEqual((out["source"], len(taken), len(refunded)), ("data", 1, 1))
+
+    def test_over_the_limit_without_credits_is_refused(self):
+        for _ in range(2):
+            self.go(Session(Resp(200, GOOD)))
+        with self.assertRaises(ask.AskError) as cm:
+            self.go(Session(Resp(200, GOOD)), spend=(lambda: False, lambda: None))
+        self.assertEqual(cm.exception.status, 429)
 
 
 class HttpTests(Base):

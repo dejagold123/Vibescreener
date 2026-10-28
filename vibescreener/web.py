@@ -15,7 +15,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from . import config as cfg
-from . import ask, brief, meta, report
+from . import ask, brief, credits, meta, report
 
 STATIC = os.path.join(os.path.dirname(__file__), "static")
 ADDR = re.compile(r"^0x[0-9a-fA-F]{40}$")
@@ -483,6 +483,28 @@ def route(db_path, path, query):
             if not ADDR.match(m.group(1)):
                 return 400, {"error": "address must be 0x followed by 40 hex characters"}
             return 200, candles(db, m.group(1), _num(query.get("interval", [None])[0], 300, 60, 3600))
+        if path == "/api/credits/config":
+            st = cfg.credits_settings()
+            return 200, {k: st[k] for k in ("enabled", "token", "treasury", "price")}
+        if path == "/api/auth/nonce":
+            if throttled(query.get("_ip", ["unknown"])[0], limit=10):
+                return 429, {"error": "Slow down a little, then try again."}
+            wdb = WriteDB(db_path)
+            try:
+                return 200, {"message": credits.issue_nonce(wdb, query.get("wallet", [""])[0])}
+            except credits.CreditsError as e:
+                return e.status, {"error": str(e)}
+            finally:
+                wdb.close()
+        if path == "/api/credits/balance":
+            wdb = WriteDB(db_path)
+            try:
+                wallet = credits.wallet_for(wdb, query.get("_auth", [""])[0])
+                if not wallet:
+                    return 401, {"error": "Sign in with your wallet first."}
+                return 200, {"wallet": wallet, "balance": credits.tokens_text(credits.balance(wdb, wallet))}
+            finally:
+                wdb.close()
         if path == "/api/ask/quota":
             wdb = WriteDB(db_path)
             try:
@@ -526,7 +548,33 @@ def throttled(ip, limit=12, per=60.0, now=None):
         return len(recent) > limit
 
 
-def post_ask(db_path, body, ip):
+def _json_body(body):
+    try:
+        data = json.loads(body or b"{}")
+        return data if isinstance(data, dict) else None
+    except ValueError:
+        return None
+
+
+def post_login(db_path, body, ip):
+    """POST /api/auth/login -> (status, payload)."""
+    data = _json_body(body)
+    if data is None:
+        return 400, {"error": "Send JSON like {\"wallet\": \"0x...\", \"signature\": \"0x...\"}."}
+    if throttled(ip, limit=10):
+        return 429, {"error": "Slow down a little, then try again."}
+    wdb = WriteDB(db_path)
+    try:
+        token = credits.login(wdb, str(data.get("wallet", "")), data.get("signature"))
+        wallet = str(data["wallet"]).lower()
+        return 200, {"session": token, "wallet": wallet, "balance": credits.tokens_text(credits.balance(wdb, wallet))}
+    except credits.CreditsError as e:
+        return e.status, {"error": str(e)}
+    finally:
+        wdb.close()
+
+
+def post_ask(db_path, body, ip, bearer=None):
     """POST /api/ask -> (status, payload). Never raises."""
     try:
         data = json.loads(body or b"{}")
@@ -538,7 +586,18 @@ def post_ask(db_path, body, ip):
         return 429, {"error": "Slow down a little, then try again."}
     wdb, rdb = WriteDB(db_path), ReadDB(db_path)
     try:
-        return 200, ask.answer(wdb, rdb, data.get("question"), ip)
+        st, wallet, spend = cfg.credits_settings(), None, None
+        if st["enabled"] and bearer:
+            wallet = credits.wallet_for(wdb, bearer)
+        if wallet:
+            spend = (lambda: credits.take(wdb, wallet, st["price_micro"]),
+                     lambda: credits.refund(wdb, wallet, st["price_micro"]))
+        if st["enabled"] and not spend:              # signed out: no balance, but the limit message can point to credits
+            spend = (lambda: False, lambda: None)
+        out = ask.answer(wdb, rdb, data.get("question"), ip, spend=spend)
+        if wallet:
+            out["credits"] = {"wallet": wallet, "balance": credits.tokens_text(credits.balance(wdb, wallet))}
+        return 200, out
     except ask.AskError as e:
         return e.status, {"error": str(e)}
     except sqlite3.OperationalError as e:
@@ -546,6 +605,11 @@ def post_ask(db_path, body, ip):
     finally:
         wdb.close()
         rdb.close()
+
+
+def bearer_token(headers):
+    h = headers.get("Authorization") or ""
+    return h[7:].strip() if h.lower().startswith("bearer ") else ""
 
 
 def client_ip(headers, peer):
@@ -577,7 +641,10 @@ def make_handler(db_path):
             body = self.rfile.read(size)
             ip = client_ip(self.headers, self.client_address[0])
             if u.path == "/api/ask":
-                status, payload = post_ask(db_path, body, ip)
+                status, payload = post_ask(db_path, body, ip, bearer_token(self.headers))
+                return self._send(status, json.dumps(payload).encode(), "application/json", cors=False)
+            if u.path == "/api/auth/login":
+                status, payload = post_login(db_path, body, ip)
                 return self._send(status, json.dumps(payload).encode(), "application/json", cors=False)
             self._send(404, b'{"error": "unknown endpoint"}', "application/json", cors=False)
 
@@ -591,6 +658,7 @@ def make_handler(db_path):
             if u.path.startswith("/api/"):
                 q = parse_qs(u.query)
                 q["_ip"] = [client_ip(self.headers, self.client_address[0])]
+                q["_auth"] = [bearer_token(self.headers)]
                 status, payload = route(db_path, u.path, q)
                 return self._send(status, json.dumps(payload).encode(), "application/json")
             self._send(404, b"not found", "text/plain")

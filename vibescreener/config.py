@@ -17,9 +17,12 @@ them in the service's Variables tab instead of editing code:
     LLM_API_KEY         key for an OpenAI-compatible AI provider (or OPENROUTER_API_KEY); enables AI wording
     LLM_BASE_URL / LLM_MODEL   provider URL (default OpenRouter) and model name(s), comma separated
     ASK_FREE_PER_DAY / ASK_GLOBAL_PER_DAY   free questions per visitor and in total per day (default 5 / 40)
+    TOKEN_ADDRESS / TREASURY_ADDRESS / ASK_PRICE   turn on token credits for the Ask box (price in whole tokens)
     BRIEF_EVERY_HOURS   how often the market brief is rewritten (default 3)
 """
 import os
+import re
+from decimal import Decimal, InvalidOperation
 
 CHAIN_ID = 46630
 PUBLIC_RPC = "https://rpc.testnet.chain.robinhood.com"
@@ -115,6 +118,21 @@ def ask_limits(env=None):
     """Daily caps for the free "Ask" box: per visitor, and for the whole site (protects the AI quota)."""
     env = os.environ if env is None else env
     return (int(_float(env, "ASK_FREE_PER_DAY", 5, 0, 1000)), int(_float(env, "ASK_GLOBAL_PER_DAY", 40, 1, 100000)))
+
+
+def credits_settings(env=None):
+    """Token credits for the Ask box. Off until both TOKEN_ADDRESS and TREASURY_ADDRESS are set."""
+    env = os.environ if env is None else env
+    addr = lambda k: (lambda v: v if re.fullmatch(r"0x[0-9a-f]{40}", v) else "")(_clean(env.get(k)).lower())
+    token, treasury = addr("TOKEN_ADDRESS"), addr("TREASURY_ADDRESS")
+    try:
+        price = Decimal(_clean(env.get("ASK_PRICE")) or "1")
+        if price <= 0 or price > 10 ** 9:
+            raise InvalidOperation
+    except InvalidOperation:
+        price = Decimal(1)
+    return {"enabled": bool(token and treasury), "token": token, "treasury": treasury,
+            "price": format(price.normalize(), "f"), "price_micro": int(price * 10 ** 6) or 1}
 
 
 def web_port(env=None):
