@@ -114,7 +114,8 @@ th.tk1{left:0;z-index:2}
 </div></div>
 <div class="strip"><div id="strip"></div></div>
 <div class="wrap"><main id="app"></main>
-<p class="note">Testnet data, indexed on-chain only. Price changes compare trade prices and ignore fees. PnL is an estimate: positions bought before indexing began are left out. ETH, VIBEVIBE and other quote tokens are never added together.</p></div>
+<p class="note">Testnet data, indexed on-chain only. Price changes compare trade prices and ignore fees. PnL is an estimate: positions bought before indexing began are left out. ETH, VIBEVIBE and other quote tokens are never added together.</p>
+<p class="note"><b>Unofficial.</b> VibeScreener is an independent tool and is not run, reviewed or endorsed by vibe/vibe. A token appearing here or ranking as trending, gaining or high volume is not a review, audit, endorsement or recommendation. Testnet ETH and tokens have no monetary value: never send mainnet funds to the testnet. Educational only, not financial, legal or security advice.</p></div>
 <script>
 const $=s=>document.querySelector(s);
 const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -283,7 +284,7 @@ const authH=()=>AK.sess?{Authorization:"Bearer "+AK.sess}:{};
 function creditsHtml(){const c=AK.cfg;if(!c||!c.enabled)return"";
  const copy=`navigator.clipboard&&navigator.clipboard.writeText('${esc(c.treasury)}')`;
  return`<div class="card"><h2 style="font-size:15px;margin-bottom:4px">Credits</h2>
- <div class="sm mut" style="margin-bottom:8px">After your free questions, each question costs ${esc(c.price)} of the VibeScreener token (testnet, no real value). Failed answers are refunded automatically.</div>
+ <div class="sm mut" style="margin-bottom:8px">After your free questions, each question costs ${esc(c.price)} of the VibeScreener token (testnet, no real value). Failed answers are refunded automatically. Never send mainnet funds; the price and treasury address are set by the operator and credits are not refundable.</div>
  ${AK.wallet?`<div class="num sm">Signed in as <b>${esc(AK.wallet.slice(0,6))}…${esc(AK.wallet.slice(-4))}</b> · balance <b>${esc(AK.bal==null?"?":AK.bal)}</b> · <a href="#/ask" onclick="creditsOut();return false">sign out</a></div>
  <div class="sm" style="margin-top:8px">To add credits, send the token <span class="mut">(only this token, only on Robinhood Chain Testnet)</span> from <b>this wallet</b> to:</div>
  <div class="num sm" style="word-break:break-all;margin:4px 0">${esc(c.treasury)} <a href="#/ask" onclick="${copy};return false">copy</a></div>

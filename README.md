@@ -1,4 +1,12 @@
-# VibeScreener indexer (v1, on-chain only)
+# VibeScreener
+
+**An on-chain screener and AI desk for the vibe/vibe launchpad on Robinhood Chain Testnet.** Category: vibecoded product (working MVP, live dashboard).
+
+What works today: every launch and trade indexed live; token, wallet and creator pages; price-change windows and candles; an AI market brief and an Ask box that only phrase figures the server looked up; optional token credits for extra questions. Not verified yet: figures have not been audited against the explorer, and there is no liquidity or USD view.
+
+> Unofficial: not run, reviewed or endorsed by vibe/vibe. Appearing or ranking here is not a review, audit or endorsement. Testnet ETH and tokens have no monetary value; never send mainnet funds to the testnet. Educational only, not financial, legal or security advice.
+
+## Indexer (on-chain only)
 
 Indexes vibe/vibe on Robinhood Chain Testnet (chain id 46630) into SQLite:
 token launches, every buy and sell, and wallet / token / creator analytics.
@@ -48,6 +56,8 @@ Options: `--rpc <url>` to use your own node, `--db <file>`.
 | `ASK_FREE_PER_DAY` / `ASK_GLOBAL_PER_DAY` | free questions per visitor (default 5) and for the whole site (default 40) per day |
 | `TOKEN_ADDRESS` + `TREASURY_ADDRESS` | turn on paying for extra questions with your token; both must be set |
 | `ASK_PRICE` | token cost of one paid question (default 1) |
+
+Credit settings (`TOKEN_ADDRESS`, `TREASURY_ADDRESS`, `ASK_PRICE`) are effectively final once you share the site: check them before announcing, because people will send tokens to that address.
 
 Set keys in the Railway Variables tab, never in chat or in the repo.
 
