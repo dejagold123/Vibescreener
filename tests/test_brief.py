@@ -35,7 +35,35 @@ class Session:
         return r
 
 
+class DiscoverSession(Session):
+    def __init__(self, ids, *responses):
+        super().__init__(*responses)
+        self.ids = ids
+
+    def get(self, url, **kw):
+        self.calls.append((url, kw))
+        r = Resp(200)
+        r.json = lambda: {"data": [{"id": i} for i in self.ids]}
+        return r
+
+
 class LLMTests(unittest.TestCase):
+    def test_openrouter_falls_back_to_currently_listed_free_models(self):
+        llm._found.update(at=0.0, ids=[])
+        env = {"LLM_API_KEY": "k", "LLM_MODEL": "old/gone:free"}
+        s = DiscoverSession(["paid/x", "new/model:free", "new/vision-image:free", "old/gone:free"],
+                            Resp(404), Resp(200, "hello there"))
+        text, model = llm.chat([{"role": "user", "content": "hi"}], env=env, session=s)
+        self.assertEqual((text, model), ("hello there", "new/model:free"))
+        self.assertTrue(s.calls[1][0].endswith("/models"))
+        llm._found.update(at=0.0, ids=[])
+
+    def test_discovery_is_skipped_for_other_providers(self):
+        s = DiscoverSession(["a:free"], Resp(404), Resp(404))
+        with self.assertRaises(llm.LLMError):
+            llm.chat([{"role": "user", "content": "hi"}], env=ENV, session=s)
+        self.assertFalse(any(c[0].endswith("/models") for c in s.calls))
+
     def test_settings(self):
         st = cfg.llm_settings({"OPENROUTER_API_KEY": " abc "})
         self.assertEqual((st["key"], st["base_url"]), ("abc", "https://openrouter.ai/api/v1"))
