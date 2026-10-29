@@ -99,6 +99,13 @@ class AnswerTests(Base):
             ask.answer(self.w, self.r, "AAA?", "10.0.0.99", session=Session(Resp(200, GOOD)), env=LIMITS)
         self.assertIn("whole site", str(cm.exception))
 
+    def test_fallback_says_why(self):
+        self.assertIsNone(self.go(Session(Resp(200, GOOD)))["reason"])
+        self.assertEqual(self.go(Session(Resp(200, INVENTED)))["reason"], "guard")
+        self.assertEqual(self.go(Session(Resp(500), Resp(500)))["reason"], "provider")
+        self.assertEqual(self.go(Session(Resp(401)))["reason"], "auth")
+        self.assertEqual(self.go(Session(), env={**LIMITS, "LLM_API_KEY": ""})["reason"], "no_key")
+
     def test_free_allowance_is_used_before_credits(self):
         taken = []
         spend = (lambda: taken.append(1) or True, lambda: None)

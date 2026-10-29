@@ -194,8 +194,9 @@ def answer(write_db, read_db, question, ip, session=None, env=None, now=None, sp
                        + (" Add credits to keep asking." if spend else ""), 429)
     ctx = retrieve(read_db, q)
     data = {k: v for k, v in ctx.items() if k != "kind"}
-    text, source, model = None, "data", None
+    text, source, model, reason = None, "data", None, "no_key"
     if llm.enabled(env):
+        reason = None
         _bump(write_db, "all", 1, now)
         if not paid:
             _bump(write_db, vkey, 1, now)
@@ -205,8 +206,13 @@ def answer(write_db, read_db, question, ip, session=None, env=None, now=None, sp
                                   max_tokens=350, session=session, env=env)
             if brief.guard(out, data):
                 text, source = out, "ai"
-        except llm.LLMError:
-            pass
+            else:
+                reason = "guard"
+        except llm.LLMAuthError:
+            reason = "auth"
+        except llm.LLMError as e:
+            reason = "provider"
+            print(f"ask: AI unavailable ({str(e)[:120]})", flush=True)
         if source != "ai":                          # a failed attempt costs the visitor nothing
             _bump(write_db, "all", -1, now)
             if paid:
@@ -217,5 +223,7 @@ def answer(write_db, read_db, question, ip, session=None, env=None, now=None, sp
         spend[1]()
     if text is None:
         text = describe(ctx)
+    if source != "ai" and reason in ("auth", "guard"):
+        print(f"ask: fell back to plain data ({reason})", flush=True)
     return {"answer": text, "source": source, "about": ctx["kind"], "data": data,
-            "quota": quota(write_db, ip, now, env)}
+            "reason": None if source == "ai" else reason, "quota": quota(write_db, ip, now, env)}

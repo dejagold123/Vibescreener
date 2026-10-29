@@ -328,7 +328,7 @@ function askView(){
  <span class="sm mut">${left==null?"":left>0?left+" free question"+(left===1?"":"s")+" left today":"No free questions left today"}</span></div>
  ${AK.err?`<div class="err sm" style="margin-top:8px" role="alert">${esc(AK.err)}</div>`:""}</div>
  ${creditsHtml()}
- ${AK.res?`<div class="card"><div class="sm mut" style="margin-bottom:6px">${AK.res.source==="ai"?"Written by AI from the data below":"Plain summary of the data (the AI couldn't be used or didn't stay within the figures)"}</div>
+ ${AK.res?`<div class="card"><div class="sm mut" style="margin-bottom:6px">${AK.res.source==="ai"?"Written by AI from the data below":"Plain summary of the data. "+({no_key:"The AI isn't switched on for this site yet.",auth:"The AI provider rejected the site's key.",provider:"The AI provider didn't answer, so you got the figures instead.",guard:"The AI wrote something that didn't match the figures, so it was discarded."}[AK.res.reason]||"The AI couldn't be used.")}</div>
  <div class="ans">${esc(AK.res.answer)}</div><details style="margin-top:8px"><summary class="sm" style="cursor:pointer;color:var(--accent)">Show the data it used</summary><div class="sm" style="margin-top:6px">${kvHtml(AK.res.data)}</div></details></div>`:""}</section></div>`;
  const ta=$("#aq");ta&&ta.addEventListener("input",()=>{AK.q=ta.value});
 }
