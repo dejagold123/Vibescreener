@@ -502,7 +502,8 @@ def route(db_path, path, query):
                 wallet = credits.wallet_for(wdb, query.get("_auth", [""])[0])
                 if not wallet:
                     return 401, {"error": "Sign in with your wallet first."}
-                return 200, {"wallet": wallet, "balance": credits.tokens_text(credits.balance(wdb, wallet))}
+                return 200, {"wallet": wallet, "balance": credits.tokens_text(credits.balance(wdb, wallet)),
+                             "deposits": credits.recent_deposits(wdb, wallet)}
             finally:
                 wdb.close()
         if path == "/api/ask/quota":

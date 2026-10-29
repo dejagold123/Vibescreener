@@ -287,8 +287,10 @@ function creditsHtml(){const c=AK.cfg;if(!c||!c.enabled)return"";
  const copy=`navigator.clipboard&&navigator.clipboard.writeText('${esc(c.treasury)}')`;
  return`<div class="card"><h2 style="font-size:15px;margin-bottom:4px">Credits</h2>
  <div class="sm mut" style="margin-bottom:8px">After your free questions, each question costs ${esc(c.price)} of the VibeScreener token (testnet, no real value). Failed answers are refunded automatically. Never send mainnet funds; the price and treasury address are set by the operator and credits are not refundable.</div>
- ${AK.wallet?`<div class="num sm">Signed in as <b>${esc(AK.wallet.slice(0,6))}…${esc(AK.wallet.slice(-4))}</b> · balance <b>${esc(AK.bal==null?"?":AK.bal)}</b> · <a href="#/ask" onclick="creditsOut();return false">sign out</a></div>
+ ${AK.wallet?`<div class="num sm">Signed in as <b>${esc(AK.wallet.slice(0,6))}…${esc(AK.wallet.slice(-4))}</b> · balance <b id="bal">${esc(AK.bal==null?"?":AK.bal)}</b> · <a href="#/ask" onclick="balRefresh();return false">refresh</a> · <a href="#/ask" onclick="creditsOut();return false">sign out</a></div>
+ <div class="sm mut" style="margin-top:4px" id="dep">${depText()}</div>
  <div class="sm" style="margin-top:8px">To add credits, send the token <span class="mut">(only this token, only on Robinhood Chain Testnet)</span> from <b>this wallet</b> to:</div>
+ <div class="sm mut">Credits go to the wallet that <i>sends</i> the tokens. If you send from a different wallet, sign in with that one to see them.</div>
  <div class="num sm" style="word-break:break-all;margin:4px 0">${esc(c.treasury)} <a href="#/ask" onclick="${copy};return false">copy</a></div>
  <div class="sm mut">Credits appear within about a minute of the transfer confirming. Tokens sent from another wallet are credited to that wallet.</div>`
  :`<button class="go" ${AK.cbusy?"disabled":""} onclick="creditsIn()">${AK.cbusy?"Waiting for wallet…":"Connect wallet"}</button>
@@ -305,7 +307,7 @@ async function creditsIn(){
   const r=await fetch("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({wallet:w,signature:sig})});
   const j=await r.json().catch(()=>({}));
   if(!r.ok)throw new Error(j.error||"Sign-in failed");
-  AK.sess=j.session;store.set("vs-session",j.session);AK.wallet=j.wallet;AK.bal=j.balance}
+  AK.sess=j.session;store.set("vs-session",j.session);AK.wallet=j.wallet;AK.bal=j.balance;balRefresh()}
  catch(e){AK.cerr=e&&e.code===4001?"Sign-in cancelled.":(e&&e.message)||"Sign-in failed."}
  AK.cbusy=false;askView();
 }
@@ -314,7 +316,14 @@ async function creditsLoad(){
  AK.cfg=await api("/api/credits/config").catch(()=>null);
  if(AK.cfg&&AK.cfg.enabled&&AK.sess){
   try{const r=await fetch("/api/credits/balance",{headers:authH()});
-   if(r.ok){const j=await r.json();AK.wallet=j.wallet;AK.bal=j.balance}else creditsOut()}catch(e){}}}
+   if(r.ok){const j=await r.json();AK.wallet=j.wallet;AK.bal=j.balance;AK.dep=j.deposits}else creditsOut()}catch(e){}}}
+function depText(){return AK.dep&&AK.dep.length?"Recent deposits: "+AK.dep.map(d=>esc(d.amount)+" ("+ago(d.ts)+")").join(", "):"No deposits seen yet for this wallet."}
+async function balRefresh(){
+ if(!AK.sess)return;
+ try{const r=await fetch("/api/credits/balance",{headers:authH()});if(!r.ok)return;const j=await r.json();
+  AK.bal=j.balance;AK.dep=j.deposits;
+  const bl=$("#bal"),dp=$("#dep");if(bl)bl.textContent=j.balance;if(dp)dp.innerHTML=depText()}catch(e){}}
+setInterval(()=>{if(location.hash==="#/ask"&&AK.wallet&&!document.hidden&&!AK.busy)balRefresh()},20000);
 function kvHtml(o){if(o==null)return"";if(typeof o!=="object")return esc(o);
  return(Array.isArray(o)?o.map((v,i)=>[i+1,v]):Object.entries(o)).map(([k,v])=>typeof v==="object"&&v!==null?`<div><span class="mut">${esc(String(k).replace(/_/g," "))}</span><div class="kvn">${kvHtml(v)}</div></div>`:`<div class="num"><span class="mut">${esc(String(k).replace(/_/g," "))}</span> ${esc(v)}</div>`).join("")}
 function askPrefill(q){AK.q=q;AK.res=null;AK.err=null;location.hash="#/ask"}

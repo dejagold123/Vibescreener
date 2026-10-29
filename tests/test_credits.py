@@ -207,6 +207,7 @@ class EndpointTests(unittest.TestCase):
         credits.credit_deposit(db, "0xt", 0, self.w, 4_000_000, 1)
         st, out = web.route(self.path, "/api/credits/balance", {"_auth": [tok]})
         self.assertEqual((st, out["balance"], out["wallet"]), (200, "4", self.w))
+        self.assertEqual([(d["tx"], d["amount"]) for d in out["deposits"]], [("0xt", "4")])
         self.assertEqual(web.post_login(self.path, b"nope", "1.1.1.1")[0], 400)
         self.assertEqual(web.post_login(self.path, json.dumps({"wallet": self.w, "signature": "0x00"}).encode(),
                                         "1.1.1.1")[0], 401)

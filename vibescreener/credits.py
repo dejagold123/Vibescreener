@@ -90,6 +90,11 @@ def balance(db, wallet):
     return r[0]["micro"] if r else 0
 
 
+def recent_deposits(db, wallet, limit=5):
+    rows = db.q("SELECT tx, micro, ts FROM deposits WHERE wallet = ? ORDER BY ts DESC LIMIT ?", (wallet, limit))
+    return [{"tx": r["tx"], "amount": tokens_text(r["micro"]), "ts": r["ts"]} for r in rows]
+
+
 def take(db, wallet, micro):
     """Spend `micro` if the wallet has it. Atomic, so two simultaneous questions can't both spend one balance."""
     with db.conn:
