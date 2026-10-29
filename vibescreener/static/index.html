@@ -226,19 +226,20 @@ function briefCard(b,now){if(!b)return`<div class="card brief"><b>Market brief</
  const ai=b.source==="ai";return`<div class="card brief"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap"><b>Market brief</b><span class="sm mut">${ageS(b.ts)} ago · ${ai?"written by AI from the figures below":"automatic summary of the figures below"}</span></div>
  <p>${esc(b.text)}</p><details><summary>Show the data it used</summary><div class="fx">${factsHtml(b.facts)}</div><div class="note">As of ${esc((b.facts&&b.facts.as_of)||"")}. Not financial advice.</div></details></div>`}
 async function home(){
+ const seq=curRender;
  const bp=api("/api/brief").catch(()=>({brief:null,now:0}));
- const [pr,ov,fd]=await Promise.all([api(`/api/pairs?sort=${S.sort}&quote=${S.quote}&window=${S.win}&limit=100`),api("/api/overview?hours=24"),api("/api/feed?limit=18")]);
+ const [pr,ov,fd]=await Promise.all([api(`/api/pairs?sort=${S.sort}&quote=${S.quote}&window=${S.win}&limit=100`),api("/api/overview?hours=24"),api("/api/feed?limit=18")]);if(seq!==curRender)return;
  setLive(ov);strip(ov);
  const head=COLS.map(([k,l,a,f])=>`<th class="c-${k} ${a}${k==="token"?" tk1":""}${S.col===k?" on":""}" ${f?`onclick="sortBy('${k}')" aria-sort="${S.col===k?(S.dir<0?"descending":"ascending"):"none"}"`:""}>${l==="Txns"||l==="Volume"||l==="Makers"?l+" "+S.win:l}${S.col===k?(S.dir<0?" ↓":" ↑"):""}</th>`).join("");
  const empty={trending:"No token has traded in this window yet.",new:"No launches in the last 24 hours.",gainers:"No token has 5+ trades from 3+ wallets with a price move in this window yet.",volume:"No trades in this window yet."}[S.sort];
- const br=await bp;
+ const br=await bp;if(seq!==curRender)return;
  $("#app").innerHTML=`<div class="layout rail"><section>${briefCard(br.brief)}<div class="filters" style="margin-top:12px">
   ${seg("sort",[["trending","Trending"],["new","New"],["gainers","Gainers"],["volume","Top volume"]])}
   ${seg("quote",[["eth","ETH"],["vibevibe","VIBEVIBE"],["all","All"]])}
   ${seg("win",[["5m","5m"],["1h","1h"],["6h","6h"],["24h","24h"]])}</div>
   ${S.sort==="volume"&&!pr.volume_comparable?`<div class="note" style="margin:0 0 8px">Volume can't be compared across quote tokens, so "All" is ranked by buyers and trades. Pick ETH or VIBEVIBE for a volume ranking.</div>`:""}
   <div class="tbl"><table class="w-${S.win}"><thead><tr>${head}</tr></thead><tbody>${pr.rows.length?tableRows(pr.rows):`<tr><td colspan="12" class="l empty">${empty}</td></tr>`}</tbody></table></div>
-  <div class="note">Volume is in each token's own quote token. Buy / sell bar = share of transactions that were buys. Click a column to sort. Updates every few seconds.</div></section>
+  <div class="note">Volume is in each token's own quote token. Buy / sell bar = share of transactions that were buys. Click a column to sort. Updates every few seconds.${pr.unpaired_trades_24h?` ${pr.unpaired_trades_24h} trade${pr.unpaired_trades_24h===1?"":"s"} in the last 24h had no paired curve event and are counted in totals but not shown in this table.`:""}</div></section>
   <aside><div class="card feed"><h2>Live trades</h2>${feedRows(fd)}</div></aside></div>`;
  pr.rows.forEach(r=>{if(r.price!=null)prevPrice.set(r.token,r.price)});
 }
@@ -249,7 +250,7 @@ function drawChart(){
  const box=$("#chart");if(!box)return;const cs=T.cs;
  if(!cs.length){box.innerHTML=`<div class="empty">No trades indexed for this token yet.</div>`;return}
  const W=Math.max(300,box.clientWidth),H=W<520?300:380,PL=6,PR=W<520?58:70,PT=14,PB=22,VH=Math.round(H*.18),PH=H-PT-PB-VH-8;
- let lo=Math.min(...cs.map(c=>c.l)),hi=Math.max(...cs.map(c=>c.h));if(hi===lo){hi*=1.02;lo*=.98}const pad=(hi-lo)*.06;lo-=pad;hi+=pad;
+ let lo=Math.min(...cs.map(c=>c.l)),hi=Math.max(...cs.map(c=>c.h));if(hi===lo){if(hi===0){hi=1}else{hi*=1.02;lo*=.98}}const pad=(hi-lo)*.06;lo-=pad;hi+=pad;
  const vmax=Math.max(...cs.map(c=>c.v),1e-18),n=cs.length,cw=(W-PL-PR)/n,bw=Math.max(1,Math.min(14,cw*.7));
  const X=i=>PL+(i+.5)*cw,Y=p=>PT+(hi-p)/(hi-lo)*PH;let g="";
  for(let k=0;k<=4;k++){const p=lo+(hi-lo)*k/4,y=Y(p);g+=`<line x1="0" x2="${W-PR}" y1="${y}" y2="${y}" stroke="var(--line)"/><text x="${W-PR+6}" y="${y+4}" fill="var(--muted)" font-size="11" font-family="var(--mono)">${esc(fmtPrice(p))}</text>`}
@@ -266,14 +267,15 @@ function drawChart(){
  svg.addEventListener("mousemove",mv);svg.addEventListener("touchmove",mv,{passive:true});
  svg.addEventListener("mouseleave",()=>{xh.setAttribute("visibility","hidden");show(last)});
 }
-async function loadCandles(addr){const r=await api(`/api/token/${addr}/candles?interval=${T.interval}`);T.cs=r.candles;drawChart()}
+async function loadCandles(addr){try{const r=await api(`/api/token/${addr}/candles?interval=${T.interval}`);T.cs=r.candles;drawChart()}catch(e){T.cs=[];drawChart()}}
 function setInt(addr,v){T.interval=v;store.set("vs-int",v);document.querySelectorAll("#ints button").forEach(b=>b.classList.toggle("on",+b.dataset.v===v));loadCandles(addr)}
 function setTab(v){T.tab=v;document.querySelectorAll("#ttabs button").forEach(b=>b.classList.toggle("on",b.dataset.v===v));$("#tpane").innerHTML=tpane(T.t)}
 function tpane(t){
  if(T.tab==="traders")return `<div class="scroll"><table><thead><tr><th class="l">Wallet</th><th>Spent</th><th>Received</th><th>Net tokens</th></tr></thead><tbody>${t.holders_seen.map(r=>`<tr style="cursor:default"><td class="l">${walLink(r.trader)}</td><td class="num">${fmtC(r.spent)}</td><td class="num">${fmtC(r.received)}</td><td class="num ${r.net_tokens>=0?"up":"down"}">${fmtC(r.net_tokens)}</td></tr>`).join("")||`<tr><td colspan="4" class="l empty">No traders yet.</td></tr>`}</tbody></table></div><div class="note">Ranked by quote spent. Net tokens only reflects trades seen since indexing began.</div>`;
  return `<div class="scroll"><table><thead><tr><th class="l">Time</th><th class="l">Type</th><th>Price</th><th>Tokens</th><th>${esc(t.quote)}</th><th class="l">Maker</th><th class="l">Tx</th></tr></thead><tbody>${t.recent_trades.map(r=>`<tr style="cursor:default"><td class="l mut num">${ageS(r.ts)}</td><td class="l ${r.side==="buy"?"up":"down"}">${r.side==="buy"?"Buy":"Sell"}</td><td class="num">${fmtPrice(r.token_amt?r.amount/r.token_amt:null)}</td><td class="num">${fmtC(r.token_amt)}</td><td class="num">${fmtC(r.amount)}</td><td class="l">${walLink(r.trader)}</td><td class="l">${txLink(r.tx)}</td></tr>`).join("")||`<tr><td colspan="7" class="l empty">No trades indexed yet.</td></tr>`}</tbody></table></div>`}
 async function tokenPage(addr){
- const t=await api("/api/token/"+addr);T.t=t;const st=t.stats||{w:{},ch:{}},d=st.w["24h"]||{txns:0,buys:0,sells:0,volume:0,buy_volume:0,makers:0};
+ const seq=curRender;T.cs=[];T.t=null;
+ const t=await api("/api/token/"+addr);if(seq!==curRender)return;T.t=t;const st=t.stats||{w:{},ch:{}},d=st.w["24h"]||{txns:0,buys:0,sells:0,volume:0,buy_volume:0,makers:0};
  const socials=Object.entries(t.socials||{}).filter(([k,v])=>/^https?:\/\//i.test(v)).map(([k,v])=>`<a href="${esc(v)}" target="_blank" rel="noopener noreferrer nofollow">${esc(k)}</a>`).join(" · ");
  $("#app").innerHTML=`<div class="thead">${img(t.image_urls,48)}<div><h1 style="font-size:20px">${esc(t.symbol||short(t.token))} <span class="mut" style="font-weight:400;font-size:14px">${esc(t.name||"")}</span></h1><div class="sm mut">${esc(t.quote)}${t.quote_is_token?" (token)":""} · <a href="${EXP}/address/${esc(t.token)}" target="_blank" rel="noopener">${esc(short(t.token))}</a> <button class="ib sm" style="padding:0 6px" onclick="navigator.clipboard&&navigator.clipboard.writeText('${esc(t.token)}');this.textContent='Copied'">Copy</button> <button class="ib sm" style="padding:0 6px" onclick="askPrefill('What is going on with ${esc(t.token)}?')">Ask AI</button></div></div>
   <div class="px num">${fmtPrice(t.last_price)} <span class="sm mut">${esc(t.quote)}</span></div>
@@ -290,27 +292,30 @@ async function tokenPage(addr){
   <div class="kv"><span>Creator</span><span>${walLink(t.creator)}</span></div><div class="kv"><span>Launched</span><span class="num">${ago(t.launched_ts)}</span></div>
   <div class="kv"><span>All-time txns</span><span class="num">${t.trades.toLocaleString()}</span></div><div class="kv"><span>All-time traders</span><span class="num">${t.traders.toLocaleString()}</span></div>
   <div class="kv"><span>All-time volume</span><span class="num">${fmtC(t.volume_quote)} ${esc(t.quote)}</span></div></div></aside></div>`;
- drawChart();loadCandles(addr);
+ loadCandles(addr);
 }
 
 /* ---------- wallets, creators ---------- */
 let wq="eth",cSort="traders";
 async function walletsPage(){
- const w=await api("/api/wallets?limit=50&quote="+wq);
+ const seq=curRender;
+ const w=await api("/api/wallets?limit=50&quote="+wq);if(seq!==curRender)return;
  $("#app").innerHTML=`<div class="filters"><div class="seg">${[["eth","ETH"],["vibevibe","VIBEVIBE"]].map(([v,l])=>`<button class="${wq===v?"on":""}" onclick="wq='${v}';loop()">${l}</button>`).join("")}</div></div>
  <div class="tbl"><table><thead><tr><th class="l">#</th><th class="l">Wallet</th><th>Est. PnL</th><th>Win rate</th><th class="m-hide">Positions</th><th class="m-hide">Tokens</th><th class="m-hide">Spent</th><th class="m-hide">Trades</th></tr></thead><tbody>
  ${w.length?w.map((r,i)=>`<tr onclick="location.hash='#/wallet/${esc(r.trader)}'"><td class="l rk num">${i+1}</td><td class="l">${walLink(r.trader)}</td><td>${pnl(r.pnl_quote,r.quote)}</td><td class="num">${r.win_rate==null?"–":Math.round(r.win_rate*100)+"%"}</td><td class="num m-hide">${r.positions}</td><td class="num m-hide">${r.tokens_traded}</td><td class="num m-hide">${fmtC(r.quote_spent)}</td><td class="num m-hide">${r.trades}</td></tr>`).join(""):`<tr><td colspan="8" class="l empty">No complete positions yet.</td></tr>`}</tbody></table></div>
  <div class="note">All-time, ranked within ${wq==="eth"?"ETH":"VIBEVIBE"}-quoted tokens only. Only positions whose buys we saw are scored; wallets that bought before indexing began show up once they trade again. Tokens quoted in other tokens aren't ranked because their amounts aren't comparable.</div>`;
 }
 async function creatorsPage(){
- const c=await api("/api/creators?limit=50&sort="+cSort+"&hours=24");
+ const seq=curRender;
+ const c=await api("/api/creators?limit=50&sort="+cSort+"&hours=24");if(seq!==curRender)return;
  $("#app").innerHTML=`<div class="filters"><div class="seg">${[["traders","Most traders"],["hit","Best hit rate"],["launched","Most launched"]].map(([k,l])=>`<button class="${cSort===k?"on":""}" onclick="cSort='${k}';loop()">${l}</button>`).join("")}</div></div>
  <div class="tbl"><table><thead><tr><th class="l">#</th><th class="l">Creator</th><th>Launched</th><th>Traded</th><th class="m-hide">Up</th><th>Hit rate</th><th class="m-hide">Active 24h</th><th class="m-hide">Traders</th></tr></thead><tbody>
  ${c.length?c.map((r,i)=>`<tr onclick="location.hash='#/wallet/${esc(r.creator)}'"><td class="l rk num">${i+1}</td><td class="l">${walLink(r.creator)}</td><td class="num">${r.tokens_launched}</td><td class="num">${r.traded}</td><td class="num m-hide">${r.up}</td><td class="num">${r.hit_rate==null?"–":Math.round(r.hit_rate*100)+"%"}</td><td class="num m-hide">${r.active}</td><td class="num m-hide">${r.unique_traders}</td></tr>`).join(""):`<tr><td colspan="8" class="l empty">${cSort==="hit"?"No creator has 3+ traded tokens yet.":"No creators with trades yet."}</td></tr>`}</tbody></table></div>
  <div class="note">Traded = launched tokens with at least one indexed trade. Up = last trade price above the first (2+ trades). Hit rate = up / traded, for creators with 3+ traded tokens. Active = traded in the last 24h. Traders = unique wallets across all their tokens. Only trades since indexing began are counted.</div>`;
 }
 async function walletPage(addr){
- const w=await api("/api/wallet/"+addr),a=w.activity;
+ const seq=curRender;
+ const w=await api("/api/wallet/"+addr);if(seq!==curRender)return;const a=w.activity;
  const tl=p=>p?`${tokLink(p.token,p.symbol)} ${pnl(p.pnl,"")}`:"–";
  $("#app").innerHTML=`<div class="card"><h1 style="font-size:18px">Wallet <span class="num">${esc(short(w.wallet))}</span></h1>
  <div class="note" style="margin:2px 0 10px"><a href="${EXP}/address/${esc(w.wallet)}" target="_blank" rel="noopener">View on explorer</a> · <a href="#/ask" onclick="AK.q='Is ${esc(w.wallet)} a good wallet?';AK.res=null">Ask AI</a> · ${a.trades} trades indexed${a.first_ts?` · first seen ${ago(a.first_ts)}, last active ${ago(a.last_ts)}`:""}</div>
@@ -397,7 +402,7 @@ async function askSend(){
  catch(e){AK.err="Couldn't reach the server. Try again."}
  AK.busy=false;askView();
 }
-async function askPage(){AK.quota=await api("/api/ask/quota").catch(()=>AK.quota);await creditsLoad();askView()}
+async function askPage(){const seq=curRender;AK.quota=await api("/api/ask/quota").catch(()=>AK.quota);await creditsLoad();if(seq!==curRender)return;askView()}
 
 /* ---------- search ---------- */
 let sTimer=null,sSeq=0;const sClose=()=>{$("#sres").hidden=true};
@@ -412,7 +417,13 @@ $("#sres").addEventListener("click",()=>{setTimeout(()=>{sClose();$("#q").value=
 document.addEventListener("click",e=>{if(!e.target.closest(".search"))sClose()});
 
 /* ---------- router ---------- */
+/* Render sequence guard (frontend major a): every render() bumps curRender,
+   and each page function captures it before its first await and abandons
+   its write if a newer render started meanwhile, so a slow token A response
+   can no longer overwrite the token B page. */
+let renderSeq=0,curRender=0;
 async function render(){
+ curRender=++renderSeq;
  const h=location.hash.replace(/^#/,"")||"/",p=h.split("/");
  document.querySelectorAll(".nav a").forEach(a=>a.classList.remove("on"));
  try{

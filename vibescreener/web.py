@@ -124,6 +124,10 @@ def overview(db, hours=24):
     out["pnl_excluded"] = {"incomplete_history": ex["incomplete_history"] or 0,
                            "unknown_quote": ex["unknown_quote"] or 0,
                            "total_positions": ex["total_positions"] or 0}
+    # M13: unpaired buys (token_amt IS NULL) are counted in trades but are
+    # invisible in the pairs table (which filters token_amt > 0). Surface
+    # the count here so the two views reconcile instead of silently differing.
+    out["unpaired_trades"] = one("SELECT COUNT(*) n FROM trades WHERE token_amt IS NULL")["n"]
     return out
 
 
@@ -237,6 +241,65 @@ def _recent_by_token(db, now, only=None):
     return by
 
 
+def _pair_stats(db, now):
+    """Streaming pairs aggregation (M9). Previously pairs() loaded every
+    24h trade row into a dict and then aggregated in Python; this iterates
+    the same ordered rows once, keeping only per-token, per-window counters
+    and price-series endpoints, and reproduces _windows() exactly:
+    per-window txns/buys/sells/volume/buy_volume/makers, price series from
+    buys only when there are 2+ buys in 24h (else all trades), and the
+    _changes baseline rule (last price before the window, else first price
+    inside if there are 2+ inside)."""
+    stats = {}
+    for token, ts, side, trader, quote_amt, price in db.conn.execute(
+            "SELECT token, ts, side, trader, quote_amt, quote_amt / token_amt AS price FROM trades "
+            "WHERE ts >= ? AND token_amt > 0 ORDER BY token, block, log_index", (now - 86400,)):
+        st = stats.get(token)
+        if st is None:
+            st = {"w": {lbl: {"txns": 0, "buys": 0, "volume": 0.0, "buy_volume": 0.0, "makers": set()}
+                       for lbl in WINDOWS},
+                  "buy_series": {lbl: {"before": None, "first": None, "last": None, "n": 0} for lbl in WINDOWS},
+                  "all_series": {lbl: {"before": None, "first": None, "last": None, "n": 0} for lbl in WINDOWS},
+                  "buys_total": 0, "price": None, "last_ts": None}
+            stats[token] = st
+        is_buy = side == "buy"
+        if is_buy:
+            st["buys_total"] += 1
+        for lbl, secs in WINDOWS.items():
+            w = st["w"][lbl]
+            series = [st["all_series"][lbl]] + ([st["buy_series"][lbl]] if is_buy else [])
+            if ts >= now - secs:
+                w["txns"] += 1
+                w["volume"] += quote_amt
+                if is_buy:
+                    w["buys"] += 1
+                    w["buy_volume"] += quote_amt
+                w["makers"].add(trader)
+                for s in series:
+                    if s["n"] == 0:
+                        s["first"] = price
+                    s["last"] = price
+                    s["n"] += 1
+            else:
+                for s in series:
+                    s["before"] = price
+        st["price"] = price
+        st["last_ts"] = ts
+    out = {}
+    for token, st in stats.items():
+        series = st["buy_series"] if st["buys_total"] >= 2 else st["all_series"]
+        ch = {}
+        for lbl in WINDOWS:
+            s = series[lbl]
+            base = s["before"] if s["before"] is not None else (s["first"] if s["n"] >= 2 else None)
+            ch[lbl] = (100.0 * (s["last"] / base - 1)) if s["n"] and base else None
+        w = {lbl: {"txns": v["txns"], "buys": v["buys"], "sells": v["txns"] - v["buys"],
+                   "volume": v["volume"], "buy_volume": v["buy_volume"], "makers": len(v["makers"])}
+             for lbl, v in st["w"].items()}
+        out[token] = {"w": w, "ch": ch, "price": st["price"], "last_ts": st["last_ts"]}
+    return out
+
+
 PAIR_SORTS = ("trending", "new", "gainers", "volume")
 
 
@@ -247,7 +310,7 @@ def pairs(db, quote="eth", sort="trending", window="24h", limit=100):
     window = window if window in WINDOWS else "24h"
     sort = sort if sort in PAIR_SORTS else "trending"
     want = QUOTES.get(quote)                                    # None = all quote tokens
-    stats = {tok: _windows(tr, now) for tok, tr in _recent_by_token(db, now).items()}
+    stats = _pair_stats(db, now)
     toks = set(stats)
     if sort == "new":                                           # new launches show even before their first trade
         toks |= {r["token"] for r in db.q("SELECT token FROM tokens WHERE ts >= ?", (now - 86400,))}
@@ -287,8 +350,13 @@ def pairs(db, quote="eth", sort="trending", window="24h", limit=100):
     else:
         rows.sort(key=lambda r: (r["makers"], r["txns"]), reverse=True)
     rows = rows[:limit]
+    # M13: unpaired buys in the last 24h, counted in overview trades but
+    # absent from pairs rows (token_amt > 0 filter). Additive field only.
+    unpaired = db.q("SELECT COUNT(*) n FROM trades WHERE token_amt IS NULL AND ts >= ?",
+                    (now - 86400,))[0]["n"]
     return {"window": window, "sort": sort, "quote": quote if want is not None else "all",
-            "volume_comparable": want is not None, "rows": _img(_label(rows, db))}
+            "volume_comparable": want is not None, "unpaired_trades_24h": unpaired,
+            "rows": _img(_label(rows, db))}
 
 
 INTERVALS = (60, 300, 900, 3600)
@@ -575,6 +643,13 @@ def post_login(db_path, body, ip):
         wdb.close()
 
 
+# M10: bounded Ask concurrency. ThreadingHTTPServer spawns a thread per
+# connection; without this, slow LLM calls could accumulate threads
+# indefinitely. Non-blocking acquire keeps the API shape unchanged (429
+# when busy, same as throttling).
+_ASK_SEM = threading.Semaphore(4)
+
+
 def post_ask(db_path, body, ip, bearer=None):
     """POST /api/ask -> (status, payload). Never raises."""
     try:
@@ -585,6 +660,8 @@ def post_ask(db_path, body, ip, bearer=None):
         return 400, {"error": "Send JSON like {\"question\": \"...\"}."}
     if throttled(ip):
         return 429, {"error": "Slow down a little, then try again."}
+    if not _ASK_SEM.acquire(blocking=False):
+        return 429, {"error": "Too many questions at once. Try again in a moment."}
     wdb, rdb = WriteDB(db_path), ReadDB(db_path)
     try:
         st, wallet, spend = cfg.credits_settings(), None, None
@@ -603,9 +680,14 @@ def post_ask(db_path, body, ip, bearer=None):
         return e.status, {"error": str(e)}
     except sqlite3.OperationalError as e:
         return 503, {"error": f"data not ready ({e})"}
+    except Exception:
+        # M5: ask.answer already refunds paid credit on unexpected errors;
+        # here we just return a clean error instead of crashing the handler.
+        return 500, {"error": "Ask failed. Please try again."}
     finally:
         wdb.close()
         rdb.close()
+        _ASK_SEM.release()
 
 
 def bearer_token(headers):
@@ -614,8 +696,24 @@ def bearer_token(headers):
 
 
 def client_ip(headers, peer):
-    fwd = (headers.get("X-Forwarded-For") or "").split(",")[0].strip()
-    return fwd or peer
+    """Visitor IP for per-visitor Ask quotas and throttling (M7).
+
+    X-Forwarded-For is only trusted behind a trusted proxy: Railway sets
+    RAILWAY_* environment variables, or deployers can set
+    VIBESCREENER_TRUST_PROXY=1. When trusted, the LAST entry is used: the
+    trusted proxy appends the real client IP, so a spoofed first entry is
+    ignored. With Railway's single edge proxy the last entry IS the real
+    client, so legitimate users are not all lumped under one proxy IP.
+    When not behind a trusted proxy, X-Forwarded-For is ignored entirely
+    and the direct peer IP is used, so a direct client cannot rotate the
+    header to defeat quotas or throttling.
+    """
+    trusted = bool(os.environ.get("RAILWAY_ENVIRONMENT") or os.environ.get("RAILWAY_SERVICE_NAME")
+                   or os.environ.get("VIBESCREENER_TRUST_PROXY") == "1")
+    if not trusted:
+        return peer
+    parts = [p.strip() for p in (headers.get("X-Forwarded-For") or "").split(",") if p.strip()]
+    return parts[-1] if parts else peer
 
 
 def make_handler(db_path):

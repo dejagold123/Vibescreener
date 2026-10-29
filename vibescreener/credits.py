@@ -38,10 +38,27 @@ def tokens_text(micro):
 
 # ---- sign-in -------------------------------------------------------------------
 
-def login_message(wallet, nonce, expires):
-    when = datetime.datetime.fromtimestamp(expires, datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    return ("VibeScreener sign-in\n\nSign this message to prove you own this wallet. It costs no gas and "
-            f"gives no access to your funds.\n\nWallet: {wallet}\nNonce: {nonce}\nExpires: {when}")
+def login_message(wallet, nonce, expires, domain=None, uri=None):
+    """EIP-4361-style sign-in message (M6). The domain, URI, chain id and
+    timestamps bind the signature to this service, so a signature obtained
+    for another site (or for a bare wallet+nonce text) cannot be replayed
+    here, and a signature for this site cannot be replayed elsewhere.
+
+    Domain comes from VIBESCREENER_DOMAIN (see config.signin_domain); the
+    default is a local placeholder, NOT a real deployed domain — deployers
+    must set it to their Railway/public domain. Issued-at is derived as
+    expires - NONCE_TTL, so login() can reconstruct this exact text from
+    the stored nonce/expiry without a schema change; changing the domain
+    or the TTL invalidates pending nonces, which is safe (they are
+    one-time and expire in 600s anyway).
+    """
+    domain = domain or cfg.signin_domain()
+    uri = uri or f"https://{domain}"
+    fmt = lambda ts: datetime.datetime.fromtimestamp(ts, datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return (f"{domain} wants you to sign in with your Ethereum account:\n{wallet}\n\n"
+            "VibeScreener sign-in. This message costs no gas and gives no access to your funds.\n\n"
+            f"URI: {uri}\nVersion: 1\nChain ID: 46630\nNonce: {nonce}\n"
+            f"Issued At: {fmt(expires - NONCE_TTL)}\nExpiration Time: {fmt(expires)}")
 
 
 def issue_nonce(db, wallet, now=None):
@@ -130,43 +147,82 @@ def _ts(text):
         return int(time.time())
 
 
-def poll(db, explorer, settings, pages=20, log=print):
-    """One pass over the token's newest transfers; credits any new transfer to the treasury."""
+def poll(db, explorer, settings, pages=20, log=print, confirmations=0, head_block=None):
+    """One pass over the token's newest transfers; credits any new transfer to the treasury.
+
+    M14: items missing transaction_hash/log_index (or with unparseable fields)
+    are skipped and logged, never allowed to abort the whole poll and stall
+    the watcher on the same page. When confirmations > 0 and a chain head is
+    known (head_block, or the explorer's block number if it exposes one),
+    only transfers at least that many blocks behind the head are credited,
+    so a reorged transfer cannot leave credit behind. Default confirmations
+    is 0 to preserve the existing unit-test behaviour; production should
+    pass a positive value (see worker()).
+    M8: credit_scan_block only advances to the newest block on a completed
+    scan. If the page cap is hit, it advances only to the oldest block seen
+    on the last scanned page, so the next poll re-scans the overlap
+    (idempotent via the (tx, log_index) key) instead of skipping deposits
+    beyond page 20 forever.
+    """
     token, treasury = settings["token"], settings["treasury"]
     scan_from = int(db.get_state("credit_scan_block", "0"))
+    if head_block is None and confirmations:
+        try:
+            head_block = int(explorer.get("/api/v2/stats", None).get("total_blocks") or 0) or None
+        except Exception:
+            head_block = None
+        if not head_block:
+            log("credits: WARNING: could not determine chain head; crediting without "
+                "confirmation depth on this poll (reorg risk until the head is available)")
     params, head, new, page = None, 0, [], 0
+    oldest_seen = None
+    completed = False
     while page < pages:
         data = explorer.get(f"/api/v2/tokens/{token}/transfers", params)
         items = data.get("items") or []
         stop = False
         for it in items:
-            blk = int(it.get("block_number") or 0)
+            try:
+                blk = int(it.get("block_number") or 0)
+            except (ValueError, TypeError):
+                log(f"credits: skipping malformed transfer item (bad block_number): {str(it)[:120]}")
+                continue
             head = max(head, blk)
+            oldest_seen = blk if oldest_seen is None else min(oldest_seen, blk)
             if scan_from and blk < scan_from - CONFIRM_MARGIN:
                 stop = True
                 break
+            if confirmations and head_block and blk > head_block - confirmations:
+                continue  # not yet confirmed; a later poll will credit it
             to, frm = (it.get("to") or {}).get("hash", ""), (it.get("from") or {}).get("hash", "")
             if to.lower() != treasury or not ADDR.match(frm or "") or frm.lower() in (ZERO, treasury):
                 continue
             total = it.get("total") or {}
             try:
                 value, decimals = int(total["value"]), int(total.get("decimals") or 18)
+                tx_hash, log_index = it["transaction_hash"], int(it["log_index"])
             except (KeyError, ValueError, TypeError):
+                # M14: skip-and-log, do not abort the poll.
+                log(f"credits: skipping malformed transfer item: {str(it)[:160]}")
                 continue
             micro = value * MICRO // 10 ** decimals
-            if micro > 0 and credit_deposit(db, it["transaction_hash"], int(it["log_index"]), frm.lower(),
+            if micro > 0 and credit_deposit(db, tx_hash, log_index, frm.lower(),
                                             micro, _ts(it.get("timestamp"))):
                 new.append((frm.lower(), micro))
         page += 1
         nxt = data.get("next_page_params")
         if stop or not nxt:
+            completed = True
             break
         params = nxt
-    else:
-        if not scan_from:
-            log("credits: first scan reached its page limit; older deposits may not be credited")
-    if head:
+    if not completed:
+        log("credits: ALERT: page limit reached before the scan completed; "
+            "credit_scan_block will only advance to the oldest block seen, "
+            "so the next poll re-scans the overlap instead of skipping deposits")
+    if completed and head:
         db.set_state("credit_scan_block", head)
+    elif not completed and oldest_seen is not None:
+        db.set_state("credit_scan_block", oldest_seen)
     return new
 
 
@@ -178,7 +234,7 @@ def worker(db_path, log=print, stop=None, every=20, explorer=None):
     while not stop.is_set():
         st = cfg.credits_settings()
         try:
-            for wallet, micro in poll(db, explorer, st, log=log):
+            for wallet, micro in poll(db, explorer, st, log=log, confirmations=12):
                 log(f"credits: {tokens_text(micro)} credited to {wallet[:6]}…{wallet[-4:]}")
         except Exception as e:                       # never let the watcher touch indexing
             log(f"credits watcher paused ({str(e)[:80]})")
