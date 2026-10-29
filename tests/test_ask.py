@@ -16,6 +16,7 @@ INVENTED = "AAA is up 12,345% today which is an extraordinary move for an ETH qu
 
 class Base(unittest.TestCase):
     def setUp(self):
+        ask._cache.clear()
         self.dir = tempfile.mkdtemp()
         self.path = os.path.join(self.dir, "a.db")
         self.w = seed(self.path)
@@ -59,7 +60,9 @@ class RetrievalTests(Base):
 
 
 class AnswerTests(Base):
-    def go(self, session, **kw):
+    def go(self, session, fresh=True, **kw):
+        if fresh:
+            ask._cache.clear()                                # most tests want a real AI call each time
         return ask.answer(self.w, self.r, "How is AAA doing?", IP, session=session, env=kw.pop("env", LIMITS), **kw)
 
     def test_ai_answer_uses_a_free_question(self):
@@ -105,6 +108,22 @@ class AnswerTests(Base):
         self.assertEqual(self.go(Session(Resp(500), Resp(500)))["reason"], "provider")
         self.assertEqual(self.go(Session(Resp(401)))["reason"], "auth")
         self.assertEqual(self.go(Session(), env={**LIMITS, "LLM_API_KEY": ""})["reason"], "no_key")
+
+    def test_rate_limited_ai_says_busy_and_costs_nothing(self):
+        from vibescreener import llm
+        llm._cool.clear()
+        out = self.go(Session(Resp(429), Resp(429)))
+        self.assertEqual((out["source"], out["reason"], out["quota"]["free_left"]), ("data", "busy", 2))
+        llm._cool.clear()
+
+    def test_repeat_question_is_served_from_cache(self):
+        ask._cache.clear()
+        s = Session(Resp(200, GOOD))
+        first = self.go(s)
+        second = self.go(s, fresh=False)                      # no second response queued: a request would crash
+        self.assertEqual((first["source"], second["source"], second["answer"]), ("ai", "ai", first["answer"]))
+        self.assertEqual(len(s.calls), 1)
+        ask._cache.clear()
 
     def test_free_allowance_is_used_before_credits(self):
         taken = []

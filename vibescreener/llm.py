@@ -19,6 +19,10 @@ class LLMAuthError(LLMError):
     pass
 
 
+class LLMBusy(LLMError):
+    """Every model is rate-limited right now (or cooling down after a limit)."""
+
+
 class LLMRejected(LLMError):
     """Models answered, but every answer failed the caller's check."""
 
@@ -33,6 +37,15 @@ def _clean_reply(text):
 
 
 _found = {"at": 0.0, "ids": []}
+_cool = {}                       # model -> time when it may be tried again after a rate limit
+
+
+def _retry_after(r):
+    try:
+        v = float((getattr(r, "headers", None) or {}).get("Retry-After", ""))
+    except (TypeError, ValueError):
+        v = 60.0
+    return min(300.0, max(10.0, v))
 
 
 def discover_free(st, session, tried, now=None):
@@ -58,10 +71,15 @@ def chat(messages, max_tokens=400, temperature=0.2, env=None, session=None, time
     headers = {"Authorization": "Bearer " + st["key"], "Content-Type": "application/json",
                "X-Title": "VibeScreener"}
     last = "no model answered"
-    models, tried, pass_no, rejected = list(st["models"]), set(), 0, None
+    models, tried, pass_no, rejected, limited, asked = list(st["models"]), set(), 0, None, False, 0
     while models:
         for model in models:
             tried.add(model)
+            if _cool.get(model, 0) > time.time():
+                limited = True
+                last = f"{model}: cooling down after a rate limit"
+                continue
+            asked += 1
             try:
                 r = session.post(st["base_url"] + "/chat/completions", headers=headers, timeout=timeout,
                                  json={"model": model, "messages": messages, "max_tokens": max_tokens,
@@ -71,6 +89,11 @@ def chat(messages, max_tokens=400, temperature=0.2, env=None, session=None, time
                 continue
             if r.status_code in (401, 403):
                 raise LLMAuthError("the AI provider rejected the API key")
+            if r.status_code == 429:
+                _cool[model] = time.time() + _retry_after(r)
+                limited = True
+                last = f"{model}: rate limited"
+                continue
             if r.status_code != 200:
                 last = f"{model}: http {r.status_code}"
                 continue
@@ -87,11 +110,14 @@ def chat(messages, max_tokens=400, temperature=0.2, env=None, session=None, time
                 continue
             last = f"{model}: empty reply"
         models = []
-        if pass_no == 0 and st["base_url"].startswith("https://openrouter.ai") and hasattr(session, "get"):
+        if (pass_no == 0 and not limited and st["base_url"].startswith("https://openrouter.ai")
+                and hasattr(session, "get")):
             models = discover_free(st, session, tried)
         pass_no += 1
     if rejected is not None:
         e = LLMRejected(last)
         e.text = rejected
         raise e
+    if limited:
+        raise LLMBusy(last)
     raise LLMError(last)

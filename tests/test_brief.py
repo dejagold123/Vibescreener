@@ -60,6 +60,42 @@ class ThinkingTests(unittest.TestCase):
             llm.chat([{"role": "user", "content": "q"}], env=ENV, session=s, accept=lambda t: brief.guard(t, {}))
 
 
+class RateLimitTests(unittest.TestCase):
+    def setUp(self):
+        llm._cool.clear()
+        llm._found.update(at=0.0, ids=[])
+        self.addCleanup(llm._cool.clear)
+        self.msgs = [{"role": "user", "content": "q"}]
+
+    def test_rate_limited_model_is_skipped_then_next_one_answers(self):
+        s = Session(Resp(429), Resp(200, CLEAN))
+        self.assertEqual(llm.chat(self.msgs, env=ENV, session=s)[1], "m2:free")
+        s2 = Session(Resp(200, CLEAN))
+        self.assertEqual(llm.chat(self.msgs, env=ENV, session=s2)[1], "m2:free")
+        self.assertEqual(len(s2.calls), 1)                   # m1 is cooling down: no request was spent on it
+
+    def test_all_limited_raises_busy_without_hammering(self):
+        s = Session(Resp(429), Resp(429))
+        with self.assertRaises(llm.LLMBusy):
+            llm.chat(self.msgs, env=ENV, session=s)
+        s2 = Session()
+        with self.assertRaises(llm.LLMBusy):
+            llm.chat(self.msgs, env=ENV, session=s2)
+        self.assertEqual(s2.calls, [])                        # nothing sent while both are cooling down
+
+    def test_cooldown_expires(self):
+        llm._cool["m1:free"] = llm.time.time() - 1
+        s = Session(Resp(200, CLEAN))
+        self.assertEqual(llm.chat(self.msgs, env=ENV, session=s)[1], "m1:free")
+
+    def test_no_discovery_requests_after_a_rate_limit(self):
+        env = {"LLM_API_KEY": "k", "LLM_MODEL": "a:free"}
+        s = DiscoverSession(["b:free"], Resp(429))
+        with self.assertRaises(llm.LLMBusy):
+            llm.chat(self.msgs, env=env, session=s)
+        self.assertFalse(any(c[0].endswith("/models") for c in s.calls))
+
+
 class GuardValueTests(unittest.TestCase):
     DATA = {"price": "0.00000001802 ETH", "change": "+100.0%", "vol": "1,250.50 ETH", "n": "3,200"}
     PAD = " is what the figures say about this token on the launchpad testnet. "

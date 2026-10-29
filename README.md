@@ -61,6 +61,8 @@ Options: `--rpc <url>` to use your own node, `--db <file>`.
 
 Credit settings (`TOKEN_ADDRESS`, `TREASURY_ADDRESS`, `ASK_PRICE`) are effectively final once you share the site: check them before announcing, because people will send tokens to that address.
 
+**Free-model rate limits.** OpenRouter limits free models (per minute and per day; check openrouter.ai for the current numbers, they change and are higher once the account has bought some credit). VibeScreener spends as few requests as it can: the brief runs every few hours, repeat questions are answered from a 10-minute cache, a rate-limited model is skipped for a while instead of retried, and a question the AI could not answer is not counted against the visitor. Keep `ASK_GLOBAL_PER_DAY` at or below what your provider allows.
+
 Set keys in the Railway Variables tab, never in chat or in the repo.
 
 **AI and credits, briefly.** The AI never sees the database: the server looks up the figures, the model only phrases them, and any answer containing a number that was not in those figures is thrown away for a plain summary. Credits: visitors sign in by signing a free message with their wallet, send your token to `TREASURY_ADDRESS`, and the server credits the sender after reading the transfer from the explorer. Free questions are used first. The only thing the web server writes is counters, sessions and balances; indexed chain data cannot be changed from the web.

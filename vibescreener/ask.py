@@ -179,6 +179,14 @@ def quota(db, ip, now=None, env=None):
             "site_left": max(0, glob - _count(db, "all", now))}
 
 
+_cache = {}                       # (question, data) -> (time, text, model): repeat questions cost no AI request
+CACHE_TTL, CACHE_MAX = 600, 200
+
+
+def _cache_key(q, data):
+    return hashlib.sha256((q.lower() + "\x00" + json.dumps(data, sort_keys=True)).encode()).hexdigest()
+
+
 def answer(write_db, read_db, question, ip, session=None, env=None, now=None, spend=None):
     """Answer one question. `spend` is an optional (take, refund) pair for paid credits."""
     q = clean_question(question)
@@ -202,11 +210,21 @@ def answer(write_db, read_db, question, ip, session=None, env=None, now=None, sp
         _bump(write_db, "all", 1, now)
         if not paid:
             _bump(write_db, vkey, 1, now)
+        key = _cache_key(q, data)
+        hit = _cache.get(key)
         try:
-            out, model = llm.chat([{"role": "system", "content": SYSTEM},
-                                   {"role": "user", "content": "Question: " + q + "\nData: " + json.dumps(data)}],
-                                  max_tokens=350, session=session, env=env, accept=lambda t: brief.guard(t, data))
+            if hit and time.time() - hit[0] < CACHE_TTL:
+                out, model = hit[1], hit[2]
+            else:
+                out, model = llm.chat([{"role": "system", "content": SYSTEM},
+                                       {"role": "user", "content": "Question: " + q + "\nData: " + json.dumps(data)}],
+                                      max_tokens=350, session=session, env=env, accept=lambda t: brief.guard(t, data))
+                if len(_cache) >= CACHE_MAX:
+                    _cache.pop(next(iter(_cache)))
+                _cache[key] = (time.time(), out, model)
             text, source = out, "ai"
+        except llm.LLMBusy:
+            reason = "busy"
         except llm.LLMRejected as e:
             reason = "guard"
             print(f"ask: AI text rejected (thinking={brief.looks_like_thinking(e.text)}, "
