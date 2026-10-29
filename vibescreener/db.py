@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS blocks(block INTEGER PRIMARY KEY, ts INTEGER);
 CREATE TABLE IF NOT EXISTS tokens(
   token TEXT PRIMARY KEY, curve TEXT, creator TEXT, name TEXT, symbol TEXT, uri TEXT,
   quote_token TEXT, launch_id INTEGER, block INTEGER, ts INTEGER, tx TEXT,
-  log_index INTEGER, extra TEXT);
+  log_index INTEGER, extra TEXT, decimals INTEGER NOT NULL DEFAULT 18);
 CREATE TABLE IF NOT EXISTS trades(
   tx TEXT, log_index INTEGER, block INTEGER, ts INTEGER, side TEXT, trader TEXT,
   token TEXT, curve TEXT, token_amount TEXT, token_fee TEXT, quote_amount TEXT,
@@ -113,6 +113,20 @@ def _f(x):
     return None if x is None else x / cfg.WEI
 
 
+def _fd(x, decimals):
+    """Float copy in whole units using the token's own decimals (M12).
+    Defaults to 18 for existing rows / unknown tokens."""
+    return None if x is None else x / (10 ** decimals)
+
+
+def _decimals(v):
+    try:
+        d = int(v)
+    except (TypeError, ValueError):
+        return 18
+    return d if 0 <= d <= 36 else 18
+
+
 def _s(x):
     return None if x is None else str(x)
 
@@ -128,6 +142,14 @@ class DB:
         if path != ":memory:":
             self.conn.execute("PRAGMA journal_mode=WAL")  # lets the dashboard read while the indexer writes
         self.conn.executescript(SCHEMA)
+        # Migration for databases created before the decimals column existed.
+        # CREATE TABLE IF NOT EXISTS does not add columns to an existing table.
+        try:
+            self.conn.execute("ALTER TABLE tokens ADD COLUMN decimals INTEGER NOT NULL DEFAULT 18")
+            self.conn.commit()
+        except sqlite3.OperationalError as e:
+            if "duplicate column" not in str(e).lower():
+                raise
 
     # cursor ----------------------------------------------------------
     def get_state(self, key, default=None):
@@ -153,22 +175,51 @@ class DB:
         with self.conn:
             self.conn.executemany("INSERT OR REPLACE INTO blocks VALUES (?,?)", mapping.items())
 
+    def delete_blocks(self, lo, hi):
+        """Delete trades and launches in a block range (M2 reorg handling).
+        Re-ingesting that range afterwards restores it without leaving rows
+        from a reorged transaction with a different hash behind."""
+        with self.conn:
+            self.conn.execute("DELETE FROM trades WHERE block BETWEEN ? AND ?", (lo, hi))
+            self.conn.execute("DELETE FROM tokens WHERE block BETWEEN ? AND ?", (lo, hi))
+
     # writes ----------------------------------------------------------
     def save(self, launches, trades, ts):
+        # Decimals for tokens in this batch, plus already-known tokens, so
+        # trade float amounts use each token's own decimals (M12). Unknown
+        # tokens and native ETH default to 18.
+        dec = {}
+        quote = {}
+        for l in launches:
+            dec[l["token"]] = _decimals(l.get("decimals"))
+            quote[l["token"]] = l["quote_token"]
+        if trades:
+            tokens_needed = {t["token"] for t in trades}
+            if tokens_needed:
+                q = ",".join("?" * len(tokens_needed))
+                for r in self.conn.execute(
+                        f"SELECT token, quote_token, decimals FROM tokens WHERE token IN ({q})",
+                        list(tokens_needed)):
+                    dec.setdefault(r["token"], _decimals(r["decimals"]))
+                    quote.setdefault(r["token"], r["quote_token"])
         with self.conn:
             for l in launches:
                 self.conn.execute(
-                    "INSERT OR REPLACE INTO tokens VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "INSERT OR REPLACE INTO tokens VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (l["token"], l["curve"], l["creator"], l["name"], l["symbol"], l["uri"],
                      l["quote_token"], l["launch_id"], l["block"], ts.get(l["block"]),
-                     l["tx"], l["log_index"], json.dumps({k: str(v) for k, v in l["extra"].items()})))
+                     l["tx"], l["log_index"], json.dumps({k: str(v) for k, v in l["extra"].items()}),
+                     _decimals(l.get("decimals"))))
             for t in trades:
+                qt = quote.get(t["token"])
+                qdec = 18 if qt is None or qt == cfg.ZERO else dec.get(qt, 18)
                 self.conn.execute(
                     "INSERT OR IGNORE INTO trades VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (t["tx"], t["log_index"], t["block"], ts.get(t["block"]), t["side"],
                      t["trader"], t["token"], t["curve"], _s(t["token_amount"]), _s(t["token_fee"]),
                      _s(t["quote_amount"]), _s(t["quote_fee"]), _s(t["reserve_after"]),
-                     _s(t["native_in"]), _f(t["token_amount"]), _f(t["quote_amount"])))
+                     _s(t["native_in"]), _fd(t["token_amount"], dec.get(t["token"], 18)),
+                     _fd(t["quote_amount"], qdec)))
 
     def q(self, sql, params=()):
         return [dict(r) for r in self.conn.execute(sql, params)]

@@ -32,7 +32,7 @@ def cmd_tx(rpc, db, args):
             print("ROUTER", decode_router(lg))
         elif t0 in (cfg.TOPIC_CURVE_BUY, cfg.TOPIC_CURVE_SELL):
             print("CURVE ", decode_curve(lg))
-    routers = [decode_router(l) for l in logs if l.address == cfg.ROUTER and l.topics and l.topics[0] == cfg.TOPIC_ROUTER]
+    routers = [r for r in (decode_router(l) for l in logs if l.address == cfg.ROUTER and l.topics and l.topics[0] == cfg.TOPIC_ROUTER) if r]
     curves = [c for c in (decode_curve(l) for l in logs if l.topics and l.topics[0] in (cfg.TOPIC_CURVE_BUY, cfg.TOPIC_CURVE_SELL)) if c]
     trades, unpaired, skipped = pair_trades(routers, curves)
     for t in trades:
@@ -71,7 +71,9 @@ def run_service(rpc, db, poll=3.0, explorer=None, log=print, serve_web=False, db
             log(f"launch backfill finished: {res['launches']} launches")
     except (ExplorerError, requests.RequestException) as e:
         log(f"launch backfill paused ({e}); it resumes on the next start")
-    Indexer(rpc, db, log=log).follow(poll=poll)
+    # Production follow uses 12 confirmations (M2 reorg safety); the
+    # Indexer default of 1 is kept only for unit tests.
+    Indexer(rpc, db, log=log).follow(poll=poll, confirmations=12)
 
 
 def main(argv=None):
@@ -128,7 +130,7 @@ def main(argv=None):
         end = rpc.block_number() if args.to_block == "latest" else int(args.to_block)
         print(Indexer(rpc, db).backfill(start, end, chunk=args.chunk))
     elif args.cmd == "follow":
-        Indexer(rpc, db).follow(poll=args.poll)
+        Indexer(rpc, db).follow(poll=args.poll, confirmations=12)
     elif args.cmd == "launches":
         print(backfill_launches(Explorer(), db, max_pages=args.max_pages, restart=args.restart))
     elif args.cmd == "run":

@@ -188,7 +188,14 @@ def _cache_key(q, data):
 
 
 def answer(write_db, read_db, question, ip, session=None, env=None, now=None, spend=None):
-    """Answer one question. `spend` is an optional (take, refund) pair for paid credits."""
+    """Answer one question. `spend` is an optional (take, refund) pair for paid credits.
+
+    Quota accounting (M4/M5): every answered question consumes quota, including
+    plain-data answers when no LLM key is configured. A failed AI attempt still
+    costs nothing (bump reversed, paid credit refunded). Any unexpected
+    exception after credit was taken refunds that credit and reverses the
+    quota bump before propagating, so credit is never lost to a crash.
+    """
     q = clean_question(question)
     free, glob = cfg.ask_limits(env)
     vkey = visitor_key(ip, now)
@@ -202,49 +209,74 @@ def answer(write_db, read_db, question, ip, session=None, env=None, now=None, sp
     else:
         raise AskError(f"You've used your {free} free questions for today. They reset at midnight UTC."
                        + (" Add credits to keep asking." if spend else ""), 429)
-    ctx = retrieve(read_db, q)
-    data = {k: v for k, v in ctx.items() if k != "kind"}
-    text, source, model, reason = None, "data", None, "no_key"
-    if llm.enabled(env):
-        reason = None
-        _bump(write_db, "all", 1, now)
-        if not paid:
-            _bump(write_db, vkey, 1, now)
-        key = _cache_key(q, data)
-        hit = _cache.get(key)
-        try:
-            if hit and time.time() - hit[0] < CACHE_TTL:
-                out, model = hit[1], hit[2]
-            else:
-                out, model = llm.chat([{"role": "system", "content": SYSTEM},
-                                       {"role": "user", "content": "Question: " + q + "\nData: " + json.dumps(data)}],
-                                      max_tokens=350, session=session, env=env, accept=lambda t: brief.guard(t, data))
-                if len(_cache) >= CACHE_MAX:
-                    _cache.pop(next(iter(_cache)))
-                _cache[key] = (time.time(), out, model)
-            text, source = out, "ai"
-        except llm.LLMBusy:
-            reason = "busy"
-        except llm.LLMRejected as e:
-            reason = "guard"
-            print(f"ask: AI text rejected (thinking={brief.looks_like_thinking(e.text)}, "
-                  f"numbers not in data={brief.extras(e.text, data)[:8]})", flush=True)
-        except llm.LLMAuthError:
-            reason = "auth"
-        except llm.LLMError as e:
-            reason = "provider"
-            print(f"ask: AI unavailable ({str(e)[:120]})", flush=True)
-        if source != "ai":                          # a failed attempt costs the visitor nothing
-            _bump(write_db, "all", -1, now)
-            if paid:
+    bumped = False
+    refunded = False
+    try:
+        ctx = retrieve(read_db, q)
+        data = {k: v for k, v in ctx.items() if k != "kind"}
+        text, source, model, reason = None, "data", None, "no_key"
+        if llm.enabled(env):
+            reason = None
+            _bump(write_db, "all", 1, now)
+            if not paid:
+                _bump(write_db, vkey, 1, now)
+            bumped = True
+            key = _cache_key(q, data)
+            hit = _cache.get(key)
+            try:
+                if hit and time.time() - hit[0] < CACHE_TTL:
+                    out, model = hit[1], hit[2]
+                else:
+                    out, model = llm.chat([{"role": "system", "content": SYSTEM},
+                                           {"role": "user", "content": "Question: " + q + "\nData: " + json.dumps(data)}],
+                                          max_tokens=350, session=session, env=env, accept=lambda t: brief.guard(t, data))
+                    if len(_cache) >= CACHE_MAX:
+                        _cache.pop(next(iter(_cache)))
+                    _cache[key] = (time.time(), out, model)
+                text, source = out, "ai"
+            except llm.LLMBusy:
+                reason = "busy"
+            except llm.LLMRejected as e:
+                reason = "guard"
+                print(f"ask: AI text rejected (thinking={brief.looks_like_thinking(e.text)}, "
+                      f"numbers not in data={brief.extras(e.text, data)[:8]})", flush=True)
+            except llm.LLMAuthError:
+                reason = "auth"
+            except llm.LLMError as e:
+                reason = "provider"
+                print(f"ask: AI unavailable ({str(e)[:120]})", flush=True)
+            if source != "ai":                          # a failed attempt costs the visitor nothing
+                _bump(write_db, "all", -1, now)
+                if paid:
+                    spend[1]()
+                    refunded = True
+                else:
+                    _bump(write_db, vkey, -1, now)
+                bumped = False
+        else:
+            # M4: a plain-data answer is still an answered question.
+            _bump(write_db, "all", 1, now)
+            if not paid:
+                _bump(write_db, vkey, 1, now)
+            bumped = True
+        if text is None:
+            text = describe(ctx)
+        if source != "ai" and reason in ("auth", "guard"):
+            print(f"ask: fell back to plain data ({reason})", flush=True)
+        return {"answer": text, "source": source, "about": ctx["kind"], "data": data,
+                "reason": None if source == "ai" else reason, "quota": quota(write_db, ip, now, env)}
+    except Exception:
+        # M5: never leave paid credit taken or quota bumped on a crash.
+        if paid and not refunded and spend:
+            try:
                 spend[1]()
-            else:
-                _bump(write_db, vkey, -1, now)
-    elif paid:
-        spend[1]()
-    if text is None:
-        text = describe(ctx)
-    if source != "ai" and reason in ("auth", "guard"):
-        print(f"ask: fell back to plain data ({reason})", flush=True)
-    return {"answer": text, "source": source, "about": ctx["kind"], "data": data,
-            "reason": None if source == "ai" else reason, "quota": quota(write_db, ip, now, env)}
+            except Exception:
+                pass
+        if bumped:
+            try:
+                _bump(write_db, "all", -1, now)
+                if not paid:
+                    _bump(write_db, vkey, -1, now)
+            except Exception:
+                pass
+        raise
