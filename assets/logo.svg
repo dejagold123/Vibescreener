@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+<defs>
+<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#141b2d"/><stop offset="1" stop-color="#0a0d14"/></linearGradient>
+<linearGradient id="ac" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9ec1ff"/><stop offset="1" stop-color="#5b8cff"/></linearGradient>
+<linearGradient id="gr" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5df2b0"/><stop offset="1" stop-color="#1fb97a"/></linearGradient>
+</defs>
+<rect width="512" height="512" rx="112" fill="url(#bg)"/>
+<rect x="8" y="8" width="496" height="496" rx="104" fill="none" stroke="#2a3552" stroke-width="4"/>
+<!-- candlesticks arranged as a V -->
+<g stroke-linecap="round">
+<line x1="120" y1="118" x2="120" y2="262" stroke="#5b8cff" stroke-width="10"/><rect x="98" y="150" width="44" height="86" rx="10" fill="url(#ac)"/>
+<line x1="188" y1="170" x2="188" y2="330" stroke="#5b8cff" stroke-width="10"/><rect x="166" y="198" width="44" height="100" rx="10" fill="url(#ac)"/>
+<line x1="256" y1="236" x2="256" y2="398" stroke="#5b8cff" stroke-width="10"/><rect x="234" y="262" width="44" height="102" rx="10" fill="url(#ac)"/>
+<line x1="324" y1="150" x2="324" y2="318" stroke="#1fb97a" stroke-width="10"/><rect x="302" y="180" width="44" height="106" rx="10" fill="url(#gr)"/>
+<line x1="392" y1="80" x2="392" y2="248" stroke="#1fb97a" stroke-width="10"/><rect x="370" y="108" width="44" height="106" rx="10" fill="url(#gr)"/>
+</g>
+</svg>

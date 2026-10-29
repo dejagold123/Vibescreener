@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/logo.png" width="120" alt="VibeScreener logo"></p>
+
 # VibeScreener
 
 **An on-chain screener and AI desk for the vibe/vibe launchpad on Robinhood Chain Testnet.** Category: vibecoded product (working MVP, live dashboard).
