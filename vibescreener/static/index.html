@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>VibeScreener</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 512 512%22 width=%22512%22 height=%22512%22%3E %3Cdefs%3E %3ClinearGradient id=%22bg%22 x1=%220%22 y1=%220%22 x2=%221%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%23141b2d%22/%3E%3Cstop offset=%221%22 stop-color=%22%230a0d14%22/%3E%3C/linearGradient%3E %3ClinearGradient id=%22ac%22 x1=%220%22 y1=%220%22 x2=%220%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%239ec1ff%22/%3E%3Cstop offset=%221%22 stop-color=%22%235b8cff%22/%3E%3C/linearGradient%3E %3ClinearGradient id=%22gr%22 x1=%220%22 y1=%220%22 x2=%220%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%235df2b0%22/%3E%3Cstop offset=%221%22 stop-color=%22%231fb97a%22/%3E%3C/linearGradient%3E %3C/defs%3E %3Crect width=%22512%22 height=%22512%22 rx=%22112%22 fill=%22url(%23bg)%22/%3E %3Crect x=%228%22 y=%228%22 width=%22496%22 height=%22496%22 rx=%22104%22 fill=%22none%22 stroke=%22%232a3552%22 stroke-width=%224%22/%3E %3C%21-- candlesticks arranged as a V --%3E %3Cg stroke-linecap=%22round%22%3E %3Cline x1=%22120%22 y1=%22118%22 x2=%22120%22 y2=%22262%22 stroke=%22%235b8cff%22 stroke-width=%2210%22/%3E%3Crect x=%2298%22 y=%22150%22 width=%2244%22 height=%2286%22 rx=%2210%22 fill=%22url(%23ac)%22/%3E %3Cline x1=%22188%22 y1=%22170%22 x2=%22188%22 y2=%22330%22 stroke=%22%235b8cff%22 stroke-width=%2210%22/%3E%3Crect x=%22166%22 y=%22198%22 width=%2244%22 height=%22100%22 rx=%2210%22 fill=%22url(%23ac)%22/%3E %3Cline x1=%22256%22 y1=%22236%22 x2=%22256%22 y2=%22398%22 stroke=%22%235b8cff%22 stroke-width=%2210%22/%3E%3Crect x=%22234%22 y=%22262%22 width=%2244%22 height=%22102%22 rx=%2210%22 fill=%22url(%23ac)%22/%3E %3Cline x1=%22324%22 y1=%22150%22 x2=%22324%22 y2=%22318%22 stroke=%22%231fb97a%22 stroke-width=%2210%22/%3E%3Crect x=%22302%22 y=%22180%22 width=%2244%22 height=%22106%22 rx=%2210%22 fill=%22url(%23gr)%22/%3E %3Cline x1=%22392%22 y1=%2280%22 x2=%22392%22 y2=%22248%22 stroke=%22%231fb97a%22 stroke-width=%2210%22/%3E%3Crect x=%22370%22 y=%22108%22 width=%2244%22 height=%22106%22 rx=%2210%22 fill=%22url(%23gr)%22/%3E %3C/g%3E %3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -104,7 +104,36 @@ th.tk1{left:0;z-index:2}
 .kvn{padding-left:12px;border-left:1px solid var(--line);margin:2px 0}
 .err{color:var(--down)}
 .desc{white-space:pre-wrap;word-break:break-word;color:var(--muted);font-size:13px;margin:0 0 8px}
-@media(max-width:640px){.bar{flex-wrap:wrap;gap:8px}.search{order:3;flex:1 1 100%;max-width:none}.right{margin-left:auto}.brand{font-size:16px}.thead .px{font-size:22px}}
+#app>.card,#app>.tbl,#app>.filters,#app>.note{max-width:1100px}
+.legal{margin-top:18px;padding-top:12px;border-top:1px solid var(--line)}
+.legal summary{cursor:pointer;color:var(--accent);margin-top:4px;display:inline-block;padding:4px 0}
+.legal p{margin:6px 0;max-width:90ch}
+@media(min-width:1180px){.layout.rail aside{position:sticky;top:64px;align-self:start}}
+@media(min-width:641px) and (max-width:999px){.tgrid aside{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start}.tgrid aside .card+.card{margin-top:0}}
+@media(max-width:1000px){.c-makers,.c-ch5m,.c-ch1h,.c-ch6h,.c-ch24h{display:none}.w-5m .c-ch5m,.w-1h .c-ch1h,.w-6h .c-ch6h,.w-24h .c-ch24h{display:table-cell}}
+@media(max-width:700px){
+ .top{position:static}
+ .bar{flex-wrap:wrap;gap:10px;padding:10px 12px}
+ .brand{order:1;font-size:17px}.right{order:2;margin-left:auto}.search{order:3;flex:1 1 100%;max-width:none}
+ .nav{position:fixed;left:0;right:0;bottom:0;z-index:40;background:var(--panel);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(4,1fr);gap:0;padding-bottom:env(safe-area-inset-bottom)}
+ .nav a{text-align:center;padding:15px 4px;border-radius:0;font-size:14px;min-height:50px}
+ .nav a.on{background:none;color:var(--accent);box-shadow:inset 0 2px 0 var(--accent)}
+ body{padding-bottom:calc(58px + env(safe-area-inset-bottom))}
+ .wrap{padding:12px 12px 24px}.strip div{padding:8px 12px}
+ .search input,.ask textarea{font-size:16px;padding:10px 12px}
+ .ib{padding:7px 12px}
+ .seg button{padding:8px 12px}.ask .chips button{padding:7px 12px}.ask .go{padding:11px 22px}
+ .filters{gap:8px}
+ .thead{gap:10px}.thead .px{font-size:24px;margin-left:auto}
+ .chs{flex:1 1 100%;max-width:none;min-width:0}.chs div{padding:5px 4px}.chs .chg{font-size:12px}
+ .m-hide,.c-age,.c-bs{display:none}
+ td,th{padding:10px 8px}
+ .tkc{min-width:0}.tkn b,.tkn span{max-width:110px}
+ .card{padding:12px}
+ #ro{position:static;display:block;font-size:11px;padding:0 0 6px;background:none}
+ .filters .seg button{padding:8px 10px}
+}
+@media(max-width:480px){.c-volume,.c-rank{display:none}}
 </style>
 </head>
 <body>
@@ -116,8 +145,10 @@ th.tk1{left:0;z-index:2}
 </div></div>
 <div class="strip"><div id="strip"></div></div>
 <div class="wrap"><main id="app"></main>
-<p class="note">Testnet data, indexed on-chain only. Price changes compare trade prices and ignore fees. PnL is an estimate: positions bought before indexing began are left out. ETH, VIBEVIBE and other quote tokens are never added together.</p>
-<p class="note"><b>Unofficial.</b> VibeScreener is an independent tool and is not run, reviewed or endorsed by vibe/vibe. A token appearing here or ranking as trending, gaining or high volume is not a review, audit, endorsement or recommendation. Testnet ETH and tokens have no monetary value: never send mainnet funds to the testnet. Educational only, not financial, legal or security advice.</p></div>
+<footer class="legal"><div class="sm mut"><b>Unofficial testnet tool.</b> Not financial advice. Testnet tokens have no monetary value.
+<details><summary>How to read the numbers, and disclaimers</summary>
+<p>Testnet data, indexed on-chain only. Price changes compare trade prices and ignore fees. PnL is an estimate: positions bought before indexing began are left out. ETH, VIBEVIBE and other quote tokens are never added together.</p>
+<p><b>Unofficial.</b> VibeScreener is an independent tool and is not run, reviewed or endorsed by vibe/vibe. A token appearing here or ranking as trending, gaining or high volume is not a review, audit, endorsement or recommendation. Testnet ETH and tokens have no monetary value: never send mainnet funds to the testnet. Educational only, not financial, legal or security advice.</p></details></div></footer></div>
 <script>
 const $=s=>document.querySelector(s);
 const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -164,11 +195,11 @@ function tableRows(rows){
  const c=COLS.find(x=>x[0]===S.col);
  if(c&&c[3])rows=[...rows].sort((a,b)=>{const x=c[3](a),y=c[3](b);return x==null?1:y==null?-1:(x-y)*-S.dir});
  return rows.map((r,i)=>{const p=prevPrice.get(r.token),fl=p!=null&&r.price!=null&&r.price!==p?(r.price>p?"fu":"fd"):"";
-  return`<tr onclick="location.hash='#/token/${esc(r.token)}'"><td class="l rk num">${i+1}</td>
-  <td class="l tk1"><div class="tkc">${img(r.image_urls,30)}<div class="tkn"><b>${esc(r.symbol||short(r.token))}</b><span>${esc(r.quote)}${r.quote_is_token?" (token)":""}${r.name&&r.name!==r.symbol?" · "+esc(r.name):""}</span></div></div></td>
-  <td class="num ${fl}">${fmtPrice(r.price)}</td><td class="num mut">${ageS(r.launched_ts)}</td><td class="num">${r.txns.toLocaleString()}</td>
-  <td title="${r.buys} buys, ${r.sells} sells">${r.txns?`<span class="pr"><i style="width:${Math.round(100*r.buys/r.txns)}%"></i></span>`:`<span class="mut">–</span>`}</td>
-  <td class="num">${fmtC(r.volume)}</td><td class="num">${r.makers}</td><td>${chg(r.ch5m)}</td><td>${chg(r.ch1h)}</td><td>${chg(r.ch6h)}</td><td>${chg(r.ch24h)}</td></tr>`}).join("")}
+  return`<tr onclick="location.hash='#/token/${esc(r.token)}'"><td class="l rk num c-rank">${i+1}</td>
+  <td class="l tk1 c-token"><div class="tkc">${img(r.image_urls,30)}<div class="tkn"><b>${esc(r.symbol||short(r.token))}</b><span>${esc(r.quote)}${r.quote_is_token?" (token)":""}${r.name&&r.name!==r.symbol?" · "+esc(r.name):""}</span></div></div></td>
+  <td class="num c-price ${fl}">${fmtPrice(r.price)}</td><td class="num mut c-age">${ageS(r.launched_ts)}</td><td class="num c-txns">${r.txns.toLocaleString()}</td>
+  <td class="c-bs" title="${r.buys} buys, ${r.sells} sells">${r.txns?`<span class="pr"><i style="width:${Math.round(100*r.buys/r.txns)}%"></i></span>`:`<span class="mut">–</span>`}</td>
+  <td class="num c-volume">${fmtC(r.volume)}</td><td class="num c-makers">${r.makers}</td><td class="c-ch5m">${chg(r.ch5m)}</td><td class="c-ch1h">${chg(r.ch1h)}</td><td class="c-ch6h">${chg(r.ch6h)}</td><td class="c-ch24h">${chg(r.ch24h)}</td></tr>`}).join("")}
 function feedRows(items){return items.length?items.map(i=>i.kind==="launch"
  ?`<div class="rowl"><span><span class="badge">new</span> ${tokLink(i.token,i.symbol)} by ${walLink(i.trader)}</span><span class="mut sm">${ageS(i.ts)}</span></div>`
  :`<div class="rowl"><span><span class="${i.side==="buy"?"up":"down"}">${i.side==="buy"?"Buy":"Sell"}</span> ${tokLink(i.token,i.symbol)} <span class="mut">${walLink(i.trader)}</span></span><span class="mut sm num">${fmtC(i.amount)} ${esc(i.quote)} · ${ageS(i.ts)}</span></div>`).join(""):`<div class="empty">No activity yet.</div>`}
@@ -184,7 +215,7 @@ async function home(){
  const bp=api("/api/brief").catch(()=>({brief:null,now:0}));
  const [pr,ov,fd]=await Promise.all([api(`/api/pairs?sort=${S.sort}&quote=${S.quote}&window=${S.win}&limit=100`),api("/api/overview?hours=24"),api("/api/feed?limit=18")]);
  setLive(ov);strip(ov);
- const head=COLS.map(([k,l,a,f])=>`<th class="${a}${k==="token"?" tk1":""}${S.col===k?" on":""}" ${f?`onclick="sortBy('${k}')" aria-sort="${S.col===k?(S.dir<0?"descending":"ascending"):"none"}"`:""}>${l==="Txns"||l==="Volume"||l==="Makers"?l+" "+S.win:l}${S.col===k?(S.dir<0?" ↓":" ↑"):""}</th>`).join("");
+ const head=COLS.map(([k,l,a,f])=>`<th class="c-${k} ${a}${k==="token"?" tk1":""}${S.col===k?" on":""}" ${f?`onclick="sortBy('${k}')" aria-sort="${S.col===k?(S.dir<0?"descending":"ascending"):"none"}"`:""}>${l==="Txns"||l==="Volume"||l==="Makers"?l+" "+S.win:l}${S.col===k?(S.dir<0?" ↓":" ↑"):""}</th>`).join("");
  const empty={trending:"No token has traded in this window yet.",new:"No launches in the last 24 hours.",gainers:"No token has 5+ trades from 3+ wallets with a price move in this window yet.",volume:"No trades in this window yet."}[S.sort];
  const br=await bp;
  $("#app").innerHTML=`<div class="layout rail"><section>${briefCard(br.brief)}<div class="filters" style="margin-top:12px">
@@ -192,7 +223,7 @@ async function home(){
   ${seg("quote",[["eth","ETH"],["vibevibe","VIBEVIBE"],["all","All"]])}
   ${seg("win",[["5m","5m"],["1h","1h"],["6h","6h"],["24h","24h"]])}</div>
   ${S.sort==="volume"&&!pr.volume_comparable?`<div class="note" style="margin:0 0 8px">Volume can't be compared across quote tokens, so "All" is ranked by buyers and trades. Pick ETH or VIBEVIBE for a volume ranking.</div>`:""}
-  <div class="tbl"><table><thead><tr>${head}</tr></thead><tbody>${pr.rows.length?tableRows(pr.rows):`<tr><td colspan="12" class="l empty">${empty}</td></tr>`}</tbody></table></div>
+  <div class="tbl"><table class="w-${S.win}"><thead><tr>${head}</tr></thead><tbody>${pr.rows.length?tableRows(pr.rows):`<tr><td colspan="12" class="l empty">${empty}</td></tr>`}</tbody></table></div>
   <div class="note">Volume is in each token's own quote token. Buy / sell bar = share of transactions that were buys. Click a column to sort. Updates every few seconds.</div></section>
   <aside><div class="card feed"><h2>Live trades</h2>${feedRows(fd)}</div></aside></div>`;
  pr.rows.forEach(r=>{if(r.price!=null)prevPrice.set(r.token,r.price)});
@@ -253,15 +284,15 @@ let wq="eth",cSort="traders";
 async function walletsPage(){
  const w=await api("/api/wallets?limit=50&quote="+wq);
  $("#app").innerHTML=`<div class="filters"><div class="seg">${[["eth","ETH"],["vibevibe","VIBEVIBE"]].map(([v,l])=>`<button class="${wq===v?"on":""}" onclick="wq='${v}';loop()">${l}</button>`).join("")}</div></div>
- <div class="tbl"><table><thead><tr><th class="l">#</th><th class="l">Wallet</th><th>Est. PnL</th><th>Win rate</th><th>Positions</th><th>Tokens</th><th>Spent</th><th>Trades</th></tr></thead><tbody>
- ${w.length?w.map((r,i)=>`<tr onclick="location.hash='#/wallet/${esc(r.trader)}'"><td class="l rk num">${i+1}</td><td class="l">${walLink(r.trader)}</td><td>${pnl(r.pnl_quote,r.quote)}</td><td class="num">${r.win_rate==null?"–":Math.round(r.win_rate*100)+"%"}</td><td class="num">${r.positions}</td><td class="num">${r.tokens_traded}</td><td class="num">${fmtC(r.quote_spent)}</td><td class="num">${r.trades}</td></tr>`).join(""):`<tr><td colspan="8" class="l empty">No complete positions yet.</td></tr>`}</tbody></table></div>
+ <div class="tbl"><table><thead><tr><th class="l">#</th><th class="l">Wallet</th><th>Est. PnL</th><th>Win rate</th><th class="m-hide">Positions</th><th class="m-hide">Tokens</th><th class="m-hide">Spent</th><th class="m-hide">Trades</th></tr></thead><tbody>
+ ${w.length?w.map((r,i)=>`<tr onclick="location.hash='#/wallet/${esc(r.trader)}'"><td class="l rk num">${i+1}</td><td class="l">${walLink(r.trader)}</td><td>${pnl(r.pnl_quote,r.quote)}</td><td class="num">${r.win_rate==null?"–":Math.round(r.win_rate*100)+"%"}</td><td class="num m-hide">${r.positions}</td><td class="num m-hide">${r.tokens_traded}</td><td class="num m-hide">${fmtC(r.quote_spent)}</td><td class="num m-hide">${r.trades}</td></tr>`).join(""):`<tr><td colspan="8" class="l empty">No complete positions yet.</td></tr>`}</tbody></table></div>
  <div class="note">All-time, ranked within ${wq==="eth"?"ETH":"VIBEVIBE"}-quoted tokens only. Only positions whose buys we saw are scored; wallets that bought before indexing began show up once they trade again. Tokens quoted in other tokens aren't ranked because their amounts aren't comparable.</div>`;
 }
 async function creatorsPage(){
  const c=await api("/api/creators?limit=50&sort="+cSort+"&hours=24");
  $("#app").innerHTML=`<div class="filters"><div class="seg">${[["traders","Most traders"],["hit","Best hit rate"],["launched","Most launched"]].map(([k,l])=>`<button class="${cSort===k?"on":""}" onclick="cSort='${k}';loop()">${l}</button>`).join("")}</div></div>
- <div class="tbl"><table><thead><tr><th class="l">#</th><th class="l">Creator</th><th>Launched</th><th>Traded</th><th>Up</th><th>Hit rate</th><th>Active 24h</th><th>Traders</th></tr></thead><tbody>
- ${c.length?c.map((r,i)=>`<tr onclick="location.hash='#/wallet/${esc(r.creator)}'"><td class="l rk num">${i+1}</td><td class="l">${walLink(r.creator)}</td><td class="num">${r.tokens_launched}</td><td class="num">${r.traded}</td><td class="num">${r.up}</td><td class="num">${r.hit_rate==null?"–":Math.round(r.hit_rate*100)+"%"}</td><td class="num">${r.active}</td><td class="num">${r.unique_traders}</td></tr>`).join(""):`<tr><td colspan="8" class="l empty">${cSort==="hit"?"No creator has 3+ traded tokens yet.":"No creators with trades yet."}</td></tr>`}</tbody></table></div>
+ <div class="tbl"><table><thead><tr><th class="l">#</th><th class="l">Creator</th><th>Launched</th><th>Traded</th><th class="m-hide">Up</th><th>Hit rate</th><th class="m-hide">Active 24h</th><th class="m-hide">Traders</th></tr></thead><tbody>
+ ${c.length?c.map((r,i)=>`<tr onclick="location.hash='#/wallet/${esc(r.creator)}'"><td class="l rk num">${i+1}</td><td class="l">${walLink(r.creator)}</td><td class="num">${r.tokens_launched}</td><td class="num">${r.traded}</td><td class="num m-hide">${r.up}</td><td class="num">${r.hit_rate==null?"–":Math.round(r.hit_rate*100)+"%"}</td><td class="num m-hide">${r.active}</td><td class="num m-hide">${r.unique_traders}</td></tr>`).join(""):`<tr><td colspan="8" class="l empty">${cSort==="hit"?"No creator has 3+ traded tokens yet.":"No creators with trades yet."}</td></tr>`}</tbody></table></div>
  <div class="note">Traded = launched tokens with at least one indexed trade. Up = last trade price above the first (2+ trades). Hit rate = up / traded, for creators with 3+ traded tokens. Active = traded in the last 24h. Traders = unique wallets across all their tokens. Only trades since indexing began are counted.</div>`;
 }
 async function walletPage(addr){
