@@ -35,6 +35,27 @@ class Session:
         return r
 
 
+class GuardValueTests(unittest.TestCase):
+    DATA = {"price": "0.00000001802 ETH", "change": "+100.0%", "vol": "1,250.50 ETH", "n": "3,200"}
+    PAD = " is what the figures say about this token on the launchpad testnet. "
+
+    def ok(self, txt):
+        return brief.guard(txt + self.PAD, self.DATA)
+
+    def test_same_value_other_format_is_fine(self):
+        for t in ("Up 100%", "Up 100.0%", "Price 1.802e-8", "Price 0.0000000180200", "Volume 1250.5",
+                  "Volume 1,250.50", "Trades 3200", "Trades 3,200"):
+            self.assertTrue(self.ok(t), t)
+
+    def test_different_value_is_rejected(self):
+        for t in ("Up 101%", "Price 0.00000001803", "Volume 1,250.6", "Trades 32,000", "Price 1.802e-7"):
+            self.assertFalse(self.ok(t), t)
+
+    def test_absurd_exponents_do_not_crash(self):
+        self.assertFalse(self.ok("Price 1e999"))
+        self.assertFalse(self.ok("Price 9" * 400))
+
+
 class DiscoverSession(Session):
     def __init__(self, ids, *responses):
         super().__init__(*responses)

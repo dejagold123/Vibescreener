@@ -7,6 +7,7 @@ So the brief is always built from real figures, with or without an AI key.
 """
 import json
 import re
+from decimal import Decimal, InvalidOperation
 import threading
 import time
 
@@ -14,7 +15,7 @@ from . import config as cfg
 from . import llm
 
 SYMBOL_OK = re.compile(r"[^A-Za-z0-9$._\-]")
-NUMBER = re.compile(r"\d[\d,]*(?:\.\d+)?")
+NUMBER = re.compile(r"\d[\d,]*(?:\.\d+)?(?:[eE][-+]?\d{1,3})?")
 
 
 def clean_symbol(sym, token=None):
@@ -95,7 +96,22 @@ def web_short(a):
 
 
 def numbers_in(text):
-    return {m.replace(",", "").rstrip(".") for m in NUMBER.findall(text or "")}
+    """Every number in the text, as a normalised value, so 100, 100.0 and 1e2 are the same number."""
+    out = set()
+    for m in NUMBER.findall(text or ""):
+        raw = m.replace(",", "").rstrip(".")
+        try:
+            v = Decimal(raw)
+            out.add(format(v.normalize(), "f") if abs(v.adjusted()) < 40 else raw)
+        except (InvalidOperation, ValueError):
+            out.add(raw)
+    return out
+
+
+def extras(text, facts_obj):
+    """Numbers in the text that the data does not contain (the reason a guard check fails)."""
+    allowed = numbers_in(json.dumps(facts_obj)) | set("123456789") | {"24"}
+    return sorted(numbers_in(text) - allowed)
 
 
 def guard(text, facts_obj):
@@ -104,8 +120,7 @@ def guard(text, facts_obj):
         return False
     if re.search(r"https?://|[*#`<>{}]|\bsystem prompt\b|ignore (all|previous|your)", text, re.I):
         return False
-    allowed = numbers_in(json.dumps(facts_obj)) | set("123456789") | {"24"}
-    return numbers_in(text) <= allowed
+    return not extras(text, facts_obj)
 
 
 def template(f):

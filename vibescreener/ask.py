@@ -208,6 +208,7 @@ def answer(write_db, read_db, question, ip, session=None, env=None, now=None, sp
                 text, source = out, "ai"
             else:
                 reason = "guard"
+                print(f"ask: AI text rejected, numbers not in the data: {brief.extras(out, data)[:8]}", flush=True)
         except llm.LLMAuthError:
             reason = "auth"
         except llm.LLMError as e:
