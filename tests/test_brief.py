@@ -35,6 +35,31 @@ class Session:
         return r
 
 
+THINK1 = "The user wants to know what is happening on vibe/vibe today based on the provided JSON data. I need to analyze it."
+THINK2 = "Let me look at the data:\n- symbol: VIBE\n- last_price: 0.000000002537 ETH\n- caveat: only trades since indexing."
+CLEAN = "VIBE last traded at a very small price and has had little activity over the past day on the launchpad testnet."
+
+
+class ThinkingTests(unittest.TestCase):
+    def test_detector(self):
+        for t in (THINK1, THINK2, "I should mention caveats here, so the token looks quiet and illiquid today overall.",
+                  "Notes:\n- one point\n- another point about this token on the testnet launchpad right now."):
+            self.assertTrue(brief.looks_like_thinking(t), t)
+        self.assertFalse(brief.looks_like_thinking(CLEAN))
+        self.assertFalse(brief.guard(THINK1, {}))
+
+    def test_chat_tries_the_next_model_when_the_first_leaks_its_reasoning(self):
+        s = Session(Resp(200, THINK1), Resp(200, CLEAN))
+        text, model = llm.chat([{"role": "user", "content": "q"}], env=ENV, session=s,
+                               accept=lambda t: brief.guard(t, {"x": "1"}))
+        self.assertEqual((text, model), (CLEAN, "m2:free"))
+
+    def test_all_models_leaking_raises_rejected(self):
+        s = Session(Resp(200, THINK1), Resp(200, THINK2))
+        with self.assertRaises(llm.LLMRejected):
+            llm.chat([{"role": "user", "content": "q"}], env=ENV, session=s, accept=lambda t: brief.guard(t, {}))
+
+
 class GuardValueTests(unittest.TestCase):
     DATA = {"price": "0.00000001802 ETH", "change": "+100.0%", "vol": "1,250.50 ETH", "n": "3,200"}
     PAD = " is what the figures say about this token on the launchpad testnet. "
@@ -154,7 +179,8 @@ class FactsTests(unittest.TestCase):
         self.assertEqual(brief.write(self.f, s, ENV), (ok, "ai", "m1:free"))
 
     def test_write_falls_back_when_ai_invents_a_number(self):
-        s = Session(Resp(200, "AAA gained 4,242% in the last day, an extraordinary run for an ETH quoted token."))
+        bad = "AAA gained 4,242% in the last day, an extraordinary run for an ETH quoted token."
+        s = Session(Resp(200, bad), Resp(200, bad))
         text, source, model = brief.write(self.f, s, ENV)
         self.assertEqual((source, model), ("template", None))
         self.assertNotIn("4,242", text)

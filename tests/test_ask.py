@@ -68,7 +68,7 @@ class AnswerTests(Base):
         self.assertEqual(out["data"]["symbol"], "AAA")
 
     def test_invented_number_falls_back_and_costs_nothing(self):
-        out = self.go(Session(Resp(200, INVENTED)))
+        out = self.go(Session(Resp(200, INVENTED), Resp(200, INVENTED)))
         self.assertEqual(out["source"], "data")
         self.assertNotIn("12,345", out["answer"])
         self.assertEqual((out["quota"]["free_left"], out["quota"]["site_left"]), (2, 5))
@@ -101,7 +101,7 @@ class AnswerTests(Base):
 
     def test_fallback_says_why(self):
         self.assertIsNone(self.go(Session(Resp(200, GOOD)))["reason"])
-        self.assertEqual(self.go(Session(Resp(200, INVENTED)))["reason"], "guard")
+        self.assertEqual(self.go(Session(Resp(200, INVENTED), Resp(200, INVENTED)))["reason"], "guard")
         self.assertEqual(self.go(Session(Resp(500), Resp(500)))["reason"], "provider")
         self.assertEqual(self.go(Session(Resp(401)))["reason"], "auth")
         self.assertEqual(self.go(Session(), env={**LIMITS, "LLM_API_KEY": ""})["reason"], "no_key")

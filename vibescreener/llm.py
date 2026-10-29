@@ -19,6 +19,10 @@ class LLMAuthError(LLMError):
     pass
 
 
+class LLMRejected(LLMError):
+    """Models answered, but every answer failed the caller's check."""
+
+
 def enabled(env=None):
     return bool(cfg.llm_settings(env)["key"])
 
@@ -40,12 +44,13 @@ def discover_free(st, session, tried, now=None):
             ids = [m.get("id", "") for m in (r.json().get("data") or []) if isinstance(m, dict)] if r.status_code == 200 else []
         except (requests.RequestException, ValueError, AttributeError):
             return []
-        _found.update(at=now, ids=[i for i in ids if i.endswith(":free") and not re.search(r"vision|image|embed|guard", i)])
+        _found.update(at=now, ids=[i for i in ids if i.endswith(":free") and not re.search(r"vision|image|embed|guard|r1|reason|think|nemotron", i)])
     return [i for i in _found["ids"] if i not in tried][:4]
 
 
-def chat(messages, max_tokens=400, temperature=0.2, env=None, session=None, timeout=45):
-    """Return (text, model). Raises LLMError when no model could answer."""
+def chat(messages, max_tokens=400, temperature=0.2, env=None, session=None, timeout=45, accept=None):
+    """Return (text, model). Raises LLMError when no model could answer.
+    `accept(text) -> bool` lets the caller refuse an answer; the next model is then tried."""
     st = cfg.llm_settings(env)
     if not st["key"]:
         raise LLMError("no API key configured")
@@ -53,7 +58,7 @@ def chat(messages, max_tokens=400, temperature=0.2, env=None, session=None, time
     headers = {"Authorization": "Bearer " + st["key"], "Content-Type": "application/json",
                "X-Title": "VibeScreener"}
     last = "no model answered"
-    models, tried, pass_no = list(st["models"]), set(), 0
+    models, tried, pass_no, rejected = list(st["models"]), set(), 0, None
     while models:
         for model in models:
             tried.add(model)
@@ -74,11 +79,19 @@ def chat(messages, max_tokens=400, temperature=0.2, env=None, session=None, time
             except (ValueError, KeyError, IndexError, TypeError):
                 last = f"{model}: unreadable reply"
                 continue
-            if text:
+            if text and (accept is None or accept(text)):
                 return text, model
+            if text:
+                rejected = text
+                last = f"{model}: answer refused by the check"
+                continue
             last = f"{model}: empty reply"
         models = []
         if pass_no == 0 and st["base_url"].startswith("https://openrouter.ai") and hasattr(session, "get"):
             models = discover_free(st, session, tried)
         pass_no += 1
+    if rejected is not None:
+        e = LLMRejected(last)
+        e.text = rejected
+        raise e
     raise LLMError(last)
