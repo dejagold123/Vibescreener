@@ -112,9 +112,13 @@ th.tk1{left:0;z-index:2}
 @media(min-width:1000px){.layout.rail aside{position:sticky;top:64px;align-self:start}}
 @media(min-width:641px) and (max-width:999px){.tgrid aside{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start}.tgrid aside .card+.card{margin-top:0}}
 @media(max-width:1000px){.c-makers,.c-ch5m,.c-ch1h,.c-ch6h,.c-ch24h{display:none}.w-5m .c-ch5m,.w-1h .c-ch1h,.w-6h .c-ch6h,.w-24h .c-ch24h{display:table-cell}}
-@media(min-width:701px) and (max-width:900px){.bar{flex-wrap:wrap;gap:10px 12px;padding:10px 14px}.search{order:3;flex:1 1 100%;max-width:none}.right{margin-left:auto}}
+@media(max-width:1000px){.bar{flex-wrap:wrap;gap:10px 12px;padding:10px 14px}.search{order:3;flex:1 1 100%;max-width:none}.right{margin-left:auto}}
 @media(max-width:700px){
- .top{position:static}
+ /* backdrop-filter on .top creates a containing block for fixed descendants,
+    which pinned the fixed bottom nav to the bottom of the header instead of
+    the viewport, covering the search row. Drop the blur on mobile so the
+    bottom nav actually goes to the bottom and search stays visible. */
+ .top{position:sticky;top:0;backdrop-filter:none;-webkit-backdrop-filter:none}
  .bar{flex-wrap:wrap;gap:10px;padding:10px 12px}
  .brand{order:1;font-size:17px}.right{order:2;margin-left:auto}.search{order:3;flex:1 1 100%;max-width:none}
  .nav{position:fixed;left:0;right:0;bottom:0;z-index:40;background:var(--panel);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(4,1fr);gap:0;padding-bottom:env(safe-area-inset-bottom)}
@@ -439,7 +443,16 @@ async function render(){
 let lastHash=null;
 function loop(){clearTimeout(timer);const y=window.scrollY,same=lastHash===location.hash;lastHash=location.hash;
  render().finally(()=>{if(same)window.scrollTo(0,y);if(!/^#\/ask/.test(location.hash))timer=setTimeout(loop,8000)})}
-window.addEventListener("hashchange",()=>{window.scrollTo(0,0);loop()});
+window.addEventListener("hashchange",()=>{window.scrollTo(0,0);
+/* Nav swap must be visible immediately, not only when the new page's data
+   arrives: a slow API call used to leave the old page on screen, which read
+   as "the nav link did nothing". Show the new page's loading state and its
+   active nav state synchronously, then let loop() fill it in. */
+ const p=location.hash.replace(/^#/,"")||"/",id=p.split("/")[1]==="wallets"?"n-wallets":p.split("/")[1]==="creators"?"n-creators":p.split("/")[1]==="ask"?"n-ask":"n-home";
+ document.querySelectorAll(".nav a").forEach(a=>a.classList.remove("on"));
+ const on=document.getElementById(id);if(on)on.classList.add("on");
+ document.getElementById("app").innerHTML=`<div class="card"><div class="empty">Loading…</div></div>`;
+ loop()});
 let rz=null;window.addEventListener("resize",()=>{clearTimeout(rz);rz=setTimeout(drawChart,150)});
 loop();
 </script>
