@@ -106,6 +106,24 @@ class PairsTests(unittest.TestCase):
         self.assertEqual(web.pairs(db, "nonsense", "bogus", "99h")["window"], "24h")
         db.close()
 
+    def test_alltime_stats_and_whole_history_candles(self):
+        db = self.rd()
+        a = web.alltime(db, A)
+        self.assertEqual(a["txns"], 3)
+        self.assertEqual(a["buys"] + a["sells"], 3)
+        self.assertGreaterEqual(a["ath"], a["atl"])
+        self.assertGreaterEqual(a["ath_ts"], a["first_ts"])
+        self.assertEqual(web.alltime(db, "0x" + "9" * 40), {"txns": 0})
+        self.assertEqual(web.token_detail(db, A)["alltime"]["txns"], 3)
+        c = web.candles(db, A, "all")
+        self.assertTrue(c["all"])
+        self.assertIn(c["interval"], web.INTERVALS)
+        self.assertEqual(sum(x["buys"] + x["sells"] for x in c["candles"]), 3)
+        self.assertLessEqual(len(c["candles"]), 201)
+        self.assertEqual(web.candles(db, A, 86400)["interval"], 86400)
+        self.assertEqual(web.route(self.path, "/api/token/%s/candles" % A, {"interval": ["all"]})[1]["all"], True)
+        db.close()
+
     def test_candles_ohlc_and_gap_filling(self):
         db = self.rd()
         c = web.candles(db, A, 60)["candles"]

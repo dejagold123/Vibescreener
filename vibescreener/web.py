@@ -359,16 +359,21 @@ def pairs(db, quote="eth", sort="trending", window="24h", limit=100):
             "rows": _img(_label(rows, db))}
 
 
-INTERVALS = (60, 300, 900, 3600)
+INTERVALS = (60, 300, 900, 3600, 14400, 86400)
 
 
 def candles(db, addr, interval=300, count=200):
     """OHLC candles from trade prices (fees ignored). Empty buckets are filled flat so the
     time axis stays honest."""
-    interval = interval if interval in INTERVALS else 300
+    whole = interval == "all"
+    if not whole:
+        interval = interval if interval in INTERVALS else 300
     rows = db.q("""SELECT ts, side, quote_amt AS q, quote_amt / token_amt AS price FROM trades
                    WHERE token = ? AND token_amt > 0 AND ts IS NOT NULL
-                   ORDER BY block DESC, log_index DESC LIMIT 5000""", (addr.lower(),))[::-1]
+                   ORDER BY block DESC, log_index DESC LIMIT %d""" % (200000 if whole else 5000), (addr.lower(),))[::-1]
+    if whole and rows:                       # smallest bucket that fits the whole history in `count` candles
+        span = rows[-1]["ts"] - rows[0]["ts"]
+        interval = next((i for i in INTERVALS if span / i <= count), INTERVALS[-1])
     by = {}
     for r in rows:
         b = r["ts"] // interval * interval
@@ -381,12 +386,12 @@ def candles(db, addr, interval=300, count=200):
             c["v"] += r["q"]
             c["buys" if r["side"] == "buy" else "sells"] += 1
     if not by:
-        return {"interval": interval, "candles": []}
+        return {"interval": interval if not whole else 300, "candles": []}
     out, prev = [], None
     for b in range(min(by), max(by) + interval, interval):
         out.append(by.get(b) or {"t": b, "o": prev, "h": prev, "l": prev, "c": prev, "v": 0, "buys": 0, "sells": 0})
         prev = out[-1]["c"]
-    return {"interval": interval, "candles": out[-count:]}
+    return {"interval": interval, "candles": out if whole else out[-count:], "all": whole}
 
 
 CREATOR_SORTS = {"traders": "unique_traders DESC, trades DESC",
@@ -464,6 +469,26 @@ def search(db, text, limit=10):
     return out
 
 
+def alltime(db, addr):
+    """Everything indexed for one token since indexing began: totals, first/last price, ATH, ATL.
+    Prices use buys only when there are 2+ buys (a sell differs from a buy by the fee)."""
+    addr = addr.lower()
+    rows = db.q("""SELECT ts, side, trader, quote_amt AS q, quote_amt / token_amt AS price FROM trades
+                   WHERE token = ? AND token_amt > 0 AND ts IS NOT NULL
+                   ORDER BY block, log_index""", (addr,))
+    if not rows:
+        return {"txns": 0}
+    buys = [r for r in rows if r["side"] == "buy"]
+    ser = buys if len(buys) >= 2 else rows
+    hi = max(ser, key=lambda r: r["price"]); lo = min(ser, key=lambda r: r["price"])
+    first, last = ser[0]["price"], ser[-1]["price"]
+    return {"txns": len(rows), "buys": len(buys), "sells": len(rows) - len(buys),
+            "volume": sum(r["q"] for r in rows), "buy_volume": sum(r["q"] for r in buys),
+            "makers": len({r["trader"] for r in rows}), "first_ts": rows[0]["ts"], "last_ts": rows[-1]["ts"],
+            "first_price": first, "ath": hi["price"], "ath_ts": hi["ts"], "atl": lo["price"], "atl_ts": lo["ts"],
+            "change": (100.0 * (last / first - 1)) if first else None}
+
+
 def token_detail(db, addr):
     addr = addr.lower()
     rows = db.q("SELECT * FROM token_stats WHERE token = ?", (addr,))
@@ -480,6 +505,7 @@ def token_detail(db, addr):
     info["socials"] = {k: v for k, v in socials.items() if str(v).lower().startswith(("http://", "https://"))}
     now = int(time.time())
     info["stats"] = _windows(_recent_by_token(db, now, addr).get(addr, []), now)
+    info["alltime"] = alltime(db, addr)
     info["price_series"] = db.q(
         """SELECT ts, quote_amt / token_amt AS price FROM trades
            WHERE token = ? AND token_amt > 0 ORDER BY block DESC, log_index DESC LIMIT 300""", (addr,))[::-1]
@@ -533,7 +559,7 @@ def vscr_market(db, token):
     return {"indexed": True, "price": t.get("last_price"), "quote": t.get("quote"),
             "ch1h": st["ch"].get("1h"), "ch24h": st["ch"].get("24h"), "txns24h": d.get("txns", 0),
             "volume24h": d.get("volume", 0), "makers24h": d.get("makers", 0),
-            "last_ts": st.get("last_ts"), "token": token}
+            "last_ts": st.get("last_ts"), "token": token, "alltime": t.get("alltime") or {}}
 
 
 def route(db_path, path, query):
@@ -563,7 +589,8 @@ def route(db_path, path, query):
         if m:
             if not ADDR.match(m.group(1)):
                 return 400, {"error": "address must be 0x followed by 40 hex characters"}
-            return 200, candles(db, m.group(1), _num(query.get("interval", [None])[0], 300, 60, 3600))
+            raw = query.get("interval", [None])[0]
+            return 200, candles(db, m.group(1), "all" if raw == "all" else _num(raw, 300, 60, 86400))
         if path == "/api/credits/config":
             st = cfg.credits_settings()
             return 200, {k: st[k] for k in ("enabled", "token", "treasury", "price")}
