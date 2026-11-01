@@ -523,6 +523,19 @@ def wallet_detail(db, addr):
 
 # ---- HTTP --------------------------------------------------------------------
 
+def vscr_market(db, token):
+    """Live market snapshot of the utility token from the indexed trades (None fields until it has traded)."""
+    t = token_detail(db, token) if token else None
+    if not t:
+        return {"indexed": False}
+    st = t.get("stats") or {"w": {}, "ch": {}}
+    d = st["w"].get("24h") or {}
+    return {"indexed": True, "price": t.get("last_price"), "quote": t.get("quote"),
+            "ch1h": st["ch"].get("1h"), "ch24h": st["ch"].get("24h"), "txns24h": d.get("txns", 0),
+            "volume24h": d.get("volume", 0), "makers24h": d.get("makers", 0),
+            "last_ts": st.get("last_ts"), "token": token}
+
+
 def route(db_path, path, query):
     """Return (status, payload) for an API path."""
     hours = _num(query.get("hours", [None])[0], 24, 1, 24 * 30)
@@ -579,7 +592,8 @@ def route(db_path, path, query):
                              "prices": {"ask": st["price"], "report": st["report_price"], "alerts": st["alerts_price"],
                                         "api": st["api_price"]}, "plan_days": st["plan_days"],
                              "holder": {"min": st["holder_min"], "free_per_day": st["holder_free"]},
-                             "telegram": st["telegram"], "stats": credits.stats(wdb)}
+                             "telegram": st["telegram"], "stats": credits.stats(wdb),
+                             "market": cached(("vm", st["token"]), lambda: vscr_market(db, st["token"]), ttl=6)}
             finally:
                 wdb.close()
         if path == "/api/apikey/me":

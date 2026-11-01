@@ -325,3 +325,14 @@ class EndpointTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class VscrMarketTest(unittest.TestCase):
+    def test_market_unindexed_and_indexed(self):
+        from vibescreener import web
+        from test_web import launch, trade
+        import tempfile, os
+        path = os.path.join(tempfile.mkdtemp(), "m.db")
+        db = DB(path)
+        self.assertEqual(web.vscr_market(web.ReadDB(path), "0x" + "55" * 20), {"indexed": False})
+        self.assertEqual(web.vscr_market(web.ReadDB(path), ""), {"indexed": False})

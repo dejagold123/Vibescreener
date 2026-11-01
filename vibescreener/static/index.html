@@ -450,6 +450,15 @@ function vKey(){if(!need("api"))return;vDo("api",async()=>{const r=await postJ("
 function vLink(){if(!need("alerts"))return;vDo("alerts",async()=>{const r=await postJ("/api/alerts/link");if(r.ok){V.code=r.j.code;V.bot=r.j.bot}else V.err.alerts=r.j.error||"Something went wrong."})}
 function vWatch(){if(!need("alerts"))return;vDo("alerts",async()=>{const r=await postJ("/api/alerts/watch",{kind:V.wk,target:V.wt.trim(),threshold:V.wth});if(!r.ok)V.err.alerts=r.j.error||"Something went wrong.";else V.wt=""})}
 function vUnwatch(id){vDo("alerts",async()=>{await postJ("/api/alerts/unwatch",{id})})}
+function mktHtml(d){const m=d.market||{},sym="$"+esc(d.symbol);
+ if(!m.indexed)return`<h2>${sym} price</h2><div class="sm mut">No trades indexed yet. The price appears here after the first trade on vibe/vibe.</div>`;
+ return`<h2>${sym} live price</h2><div class="px num" style="font-size:28px">${fmtPrice(m.price)} <span class="sm mut">${esc(m.quote||"")}</span></div>
+  <div class="kv"><span>1h</span><span>${chg(m.ch1h)}</span></div><div class="kv"><span>24h</span><span>${chg(m.ch24h)}</span></div>
+  <div class="kv"><span>24h volume</span><span class="num">${fmtC(m.volume24h)} ${esc(m.quote||"")}</span></div>
+  <div class="kv"><span>24h trades · traders</span><span class="num">${m.txns24h} · ${m.makers24h}</span></div>
+  <div class="sm mut" style="margin-top:6px">Last trade ${esc(ago(m.last_ts))} · price of the last trade, fees ignored · updates every 15 seconds · <a href="#/token/${esc(m.token)}">chart and trades</a></div>`}
+setInterval(async()=>{if(!/^#\/vscr/.test(location.hash)||document.hidden||!V.d||!V.d.enabled)return;
+ try{const d=await api("/api/vscr");V.d.market=d.market;const el=$("#vmkt");if(el)el.innerHTML=mktHtml(V.d)}catch(e){}},15000);
 function vscrView(){
  const d=V.d||{};if(!d.enabled){$("#app").innerHTML=`<div class="card"><h1 style="font-size:18px">Token utilities</h1><p class="mut">Token credits aren't switched on for this site yet.</p></div>`;return}
  const sym="$"+esc(d.symbol),P=d.prices,h=AK.holder,pl=AK.plans||{},st=d.stats||{},days=d.plan_days,B=k=>V.busy[k]?"disabled":"";
@@ -465,6 +474,7 @@ function vscrView(){
  $("#app").innerHTML=`<div style="max-width:900px">
  <div class="card"><h1 style="font-size:20px;margin-bottom:4px">${sym} utilities</h1>
   <div class="sm mut">${sym} is a testnet token with no monetary value. It pays for extra features on VibeScreener. Pay with credits: connect your wallet, send ${sym} to the treasury address below from that same wallet, and the balance appears within about a minute.</div></div>
+ <div class="card" id="vmkt">${mktHtml(d)}</div>
  ${creditsHtml()}
  <div class="card"><h2>What ${sym} does here</h2>
   <div class="kv"><span>Ask a question (after free ones)</span><span class="num">${esc(P.ask)} ${sym}</span></div>
