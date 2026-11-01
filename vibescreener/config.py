@@ -19,6 +19,7 @@ them in the service's Variables tab instead of editing code:
     ASK_FREE_PER_DAY / ASK_GLOBAL_PER_DAY   free questions per visitor and in total per day (default 5 / 40)
     TOKEN_ADDRESS / TREASURY_ADDRESS / ASK_PRICE   turn on token credits for the Ask box (price in whole tokens)
     BRIEF_EVERY_HOURS   how often the market brief is rewritten (default 3)
+    VIBESCREENER_DOMAIN   public domain for the EIP-4361 sign-in message (default: vibescreener.local placeholder)
 """
 import os
 import re
@@ -132,6 +133,14 @@ def _dec(env, key, default, lo, hi):
 
 def _micro(v):
     return max(1, int(v * 10 ** 6))
+
+
+def signin_domain(env=None):
+    """Domain for the EIP-4361 sign-in message. Deployers MUST set
+    VIBESCREENER_DOMAIN to their real public domain; the default is only a
+    placeholder for local use and must not be presented as a real domain."""
+    env = os.environ if env is None else env
+    return _clean(env.get("VIBESCREENER_DOMAIN")) or "vibescreener.local"
 
 
 def credits_settings(env=None):

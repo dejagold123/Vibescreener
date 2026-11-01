@@ -6,8 +6,11 @@ import requests
 
 from .decode import Log
 
+# NOTE (M11): "timeout"/"timed out" are deliberately NOT range hints. A
+# timeout is a transient failure, not proof the range was too large; treating
+# it as one made backfill halve its chunk for a slow node and then oscillate.
 RANGE_HINTS = ("range", "limit", "too many", "exceed", "more than", "response size",
-               "10000", "timeout", "timed out")
+               "10000")
 
 
 _KEY_IN_URL = re.compile(r"(/v2/)[A-Za-z0-9_\-]{6,}")
@@ -68,7 +71,8 @@ class Rpc:
                 last = e
             time.sleep(min(2 ** attempt, 10))
         if isinstance(last, requests.Timeout):
-            raise RangeTooLarge(f"timeout: {last}")
+            # M11: timeouts are transient retries, not range errors.
+            raise RpcError(f"timeout after {self.retries} tries: {last}")
         raise RpcError(f"request failed after {self.retries} tries: {last}")
 
     def call(self, method, params=None):
@@ -109,8 +113,19 @@ class Rpc:
                 res = self._post(batch)
                 for item in res:
                     b = part[item["id"]]
-                    out[b] = int(item["result"]["timestamp"], 16)
+                    # M15: a future/missing block returns result=None; skip it
+                    # instead of crashing the caller with TypeError/KeyError.
+                    result = item.get("result") if isinstance(item, dict) else None
+                    if result is None or "timestamp" not in result:
+                        continue
+                    out[b] = int(result["timestamp"], 16)
             except (RpcError, KeyError, TypeError):
                 for b in part:  # node may not support batches
-                    out[b] = int(self.call("eth_getBlockByNumber", [hex(b), False])["timestamp"], 16)
+                    try:
+                        blk = self.call("eth_getBlockByNumber", [hex(b), False])
+                    except (RpcError, KeyError, TypeError):
+                        continue
+                    if blk is None or "timestamp" not in blk:
+                        continue
+                    out[b] = int(blk["timestamp"], 16)
         return out

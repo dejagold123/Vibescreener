@@ -61,27 +61,42 @@ def discover_free(st, session, tried, now=None):
     return [i for i in _found["ids"] if i not in tried][:4]
 
 
-def chat(messages, max_tokens=400, temperature=0.2, env=None, session=None, timeout=45, accept=None):
+def chat(messages, max_tokens=400, temperature=0.2, env=None, session=None, timeout=45, accept=None,
+         overall_timeout=60):
     """Return (text, model). Raises LLMError when no model could answer.
-    `accept(text) -> bool` lets the caller refuse an answer; the next model is then tried."""
+    `accept(text) -> bool` lets the caller refuse an answer; the next model is then tried.
+
+    M10: `overall_timeout` (default 60s) caps the whole multi-model attempt:
+    each request uses min(timeout, time remaining), and once the deadline
+    passes no further model (including discovered free models) is tried.
+    Previously 2 configured + up to 4 discovered models at 45s each could
+    hold one Ask request for ~270s.
+    """
     st = cfg.llm_settings(env)
     if not st["key"]:
         raise LLMError("no API key configured")
     session = session or requests
     headers = {"Authorization": "Bearer " + st["key"], "Content-Type": "application/json",
                "X-Title": "VibeScreener"}
+    deadline = time.time() + overall_timeout if overall_timeout else None
     last = "no model answered"
     models, tried, pass_no, rejected, limited, asked = list(st["models"]), set(), 0, None, False, 0
     while models:
         for model in models:
+            if deadline is not None and time.time() >= deadline:
+                last = "overall LLM deadline reached"
+                break
             tried.add(model)
             if _cool.get(model, 0) > time.time():
                 limited = True
                 last = f"{model}: cooling down after a rate limit"
                 continue
             asked += 1
+            per_call = timeout
+            if deadline is not None:
+                per_call = max(1, min(timeout, deadline - time.time()))
             try:
-                r = session.post(st["base_url"] + "/chat/completions", headers=headers, timeout=timeout,
+                r = session.post(st["base_url"] + "/chat/completions", headers=headers, timeout=per_call,
                                  json={"model": model, "messages": messages, "max_tokens": max_tokens,
                                        "temperature": temperature})
             except requests.RequestException as e:
@@ -110,7 +125,8 @@ def chat(messages, max_tokens=400, temperature=0.2, env=None, session=None, time
                 continue
             last = f"{model}: empty reply"
         models = []
-        if (pass_no == 0 and not limited and st["base_url"].startswith("https://openrouter.ai")
+        if (deadline is None or time.time() < deadline) and (pass_no == 0 and not limited
+                and st["base_url"].startswith("https://openrouter.ai")
                 and hasattr(session, "get")):
             models = discover_free(st, session, tried)
         pass_no += 1

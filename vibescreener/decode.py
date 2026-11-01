@@ -78,54 +78,81 @@ def _addr_topic(t: str) -> str:
 
 
 def _read_string(data_bytes: bytes, offset: int) -> str:
+    if offset < 0 or offset + 32 > len(data_bytes):
+        raise ValueError("string offset out of bounds")
     length = int.from_bytes(data_bytes[offset:offset + 32], "big")
+    if length < 0 or offset + 32 + length > len(data_bytes):
+        raise ValueError("string length out of bounds")
     return data_bytes[offset + 32: offset + 32 + length].decode("utf-8", "replace")
 
 
-def decode_launch(lg: Log) -> dict:
-    w = _words(lg.data)
-    raw = bytes.fromhex(lg.data[2:])
-    return {
-        "tx": lg.tx, "log_index": lg.log_index, "block": lg.block,
-        "launch_id": int(lg.topics[1], 16),
-        "creator": _addr_topic(lg.topics[2]),
-        "token": _addr_topic(lg.topics[3]),
-        "curve": _addr_word(w[0]),
-        "quote_token": _addr_word(w[4]),
-        "name": _read_string(raw, w[1]),
-        "symbol": _read_string(raw, w[2]),
-        "uri": _read_string(raw, w[3]),
-        "extra": {"w5": w[5], "w6": w[6], "w8": w[8]},
-    }
+def decode_launch(lg: Log) -> Optional[dict]:
+    """Return the launch dict, or None for a malformed log (short topics/data
+    or out-of-bounds string offsets). Callers must skip None, never crash."""
+    try:
+        if len(lg.topics) < 4:
+            return None
+        w = _words(lg.data)
+        if len(w) < 9:
+            return None
+        raw = bytes.fromhex(lg.data[2:] if lg.data.startswith("0x") else lg.data)
+        return {
+            "tx": lg.tx, "log_index": lg.log_index, "block": lg.block,
+            "launch_id": int(lg.topics[1], 16),
+            "creator": _addr_topic(lg.topics[2]),
+            "token": _addr_topic(lg.topics[3]),
+            "curve": _addr_word(w[0]),
+            "quote_token": _addr_word(w[4]),
+            "name": _read_string(raw, w[1]),
+            "symbol": _read_string(raw, w[2]),
+            "uri": _read_string(raw, w[3]),
+            "extra": {"w5": w[5], "w6": w[6], "w8": w[8]},
+        }
+    except (IndexError, ValueError):
+        return None
 
 
-def decode_router(lg: Log) -> dict:
-    w = _words(lg.data)
-    return {
-        "tx": lg.tx, "log_index": lg.log_index, "block": lg.block,
-        "trader": _addr_topic(lg.topics[1]),
-        "curve": _addr_topic(lg.topics[2]),
-        "kind": w[0],
-        "token_in": _addr_word(w[1]),
-        "token_out": _addr_word(w[2]),
-        "a": w[3],
-        "b": w[4],
-    }
+def decode_router(lg: Log) -> Optional[dict]:
+    try:
+        if len(lg.topics) < 3:
+            return None
+        w = _words(lg.data)
+        if len(w) < 5:
+            return None
+        return {
+            "tx": lg.tx, "log_index": lg.log_index, "block": lg.block,
+            "trader": _addr_topic(lg.topics[1]),
+            "curve": _addr_topic(lg.topics[2]),
+            "kind": w[0],
+            "token_in": _addr_word(w[1]),
+            "token_out": _addr_word(w[2]),
+            "a": w[3],
+            "b": w[4],
+        }
+    except (IndexError, ValueError):
+        return None
 
 
 def decode_curve(lg: Log) -> Optional[dict]:
-    w = _words(lg.data)
-    t0 = lg.topics[0]
-    base = {"tx": lg.tx, "log_index": lg.log_index, "block": lg.block,
-            "address": lg.address, "account": _addr_topic(lg.topics[2])}
-    if t0 == cfg.TOPIC_CURVE_BUY:
-        return {**base, "side": "buy", "gross_tokens": w[0], "tokens": w[1],
-                "token_fee": w[2], "reserve_after": w[3], "quote_fee": w[4]}
-    if t0 == cfg.TOPIC_CURVE_SELL:
-        return {**base, "side": "sell", "gross_tokens": w[0], "tokens": w[0],
-                "tokens_after_fee": w[1], "token_fee": w[2],
-                "reserve_after": w[3], "quote_fee": w[4]}
-    return None
+    try:
+        if len(lg.topics) < 3:
+            return None
+        w = _words(lg.data)
+        if len(w) < 5:
+            return None
+        t0 = lg.topics[0]
+        base = {"tx": lg.tx, "log_index": lg.log_index, "block": lg.block,
+                "address": lg.address, "account": _addr_topic(lg.topics[2])}
+        if t0 == cfg.TOPIC_CURVE_BUY:
+            return {**base, "side": "buy", "gross_tokens": w[0], "tokens": w[1],
+                    "token_fee": w[2], "reserve_after": w[3], "quote_fee": w[4]}
+        if t0 == cfg.TOPIC_CURVE_SELL:
+            return {**base, "side": "sell", "gross_tokens": w[0], "tokens": w[0],
+                    "tokens_after_fee": w[1], "token_fee": w[2],
+                    "reserve_after": w[3], "quote_fee": w[4]}
+        return None
+    except (IndexError, ValueError):
+        return None
 
 
 def pair_trades(routers: list, curves: list):
@@ -151,6 +178,12 @@ def pair_trades(routers: list, curves: list):
         else:
             unpaired += 1
         token = r["token_out"] if side == "buy" else r["token_in"]
+        # Amount asymmetry is intentional for position accounting: a buy
+        # credits the net tokens actually received, while a sell debits the
+        # gross tokens sold (the fee is taken from that gross amount, so
+        # selling everything you bought nets to zero). Prices on both sides
+        # therefore include fees. Unpaired buys get token_amount=None and
+        # are counted separately (see web.pairs/overview unpaired counts).
         trade = {
             "tx": r["tx"], "log_index": r["log_index"], "block": r["block"],
             "side": side, "trader": r["trader"], "token": token, "curve": r["curve"],
