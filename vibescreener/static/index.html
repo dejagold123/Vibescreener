@@ -98,8 +98,8 @@ th.tk1{left:0;z-index:2}
 .ask .chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
 .ask .chips button{background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:3px 11px;cursor:pointer;color:var(--muted);font-size:12.5px}
 .ask .chips button:hover{color:var(--text)}
-.ask .go{background:var(--accent);color:var(--bg);border:0;border-radius:8px;padding:8px 18px;font-weight:600;cursor:pointer}
-.ask .go:disabled{opacity:.55;cursor:wait}
+.go{background:var(--accent);color:var(--bg);border:0;border-radius:8px;padding:8px 18px;font-weight:600;cursor:pointer}
+.go:disabled{opacity:.55;cursor:wait}
 .ans{white-space:pre-wrap;word-break:break-word;line-height:1.6;max-width:80ch}
 .kvn{padding-left:12px;border-left:1px solid var(--line);margin:2px 0}
 .err{color:var(--down)}
@@ -118,11 +118,12 @@ th.tk1{left:0;z-index:2}
  .nav{position:fixed;left:0;right:0;bottom:0;z-index:40;background:var(--panel);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(4,1fr);gap:0;padding-bottom:env(safe-area-inset-bottom)}
  .nav a{text-align:center;padding:15px 4px;border-radius:0;font-size:14px;min-height:50px}
  .nav a.on{background:none;color:var(--accent);box-shadow:inset 0 2px 0 var(--accent)}
+ .nav a[hidden]{display:none}.nav.five{grid-template-columns:repeat(5,1fr)}.nav.five a{font-size:13px;padding:15px 2px}
  body{padding-bottom:calc(58px + env(safe-area-inset-bottom))}
  .wrap{padding:12px 12px 24px}.strip div{padding:8px 12px}
  .search input,.ask textarea{font-size:16px;padding:10px 12px}
  .ib{padding:7px 12px}
- .seg button{padding:8px 12px}.ask .chips button{padding:7px 12px}.ask .go{padding:11px 22px}
+ .seg button{padding:8px 12px}.ask .chips button{padding:7px 12px}.go{padding:11px 22px}
  .filters{gap:8px}
  .thead{gap:10px}.thead .px{font-size:24px;margin-left:auto}
  .chs{flex:1 1 100%;max-width:none;min-width:0}.chs div{padding:5px 4px}.chs .chg{font-size:12px}
@@ -139,7 +140,7 @@ th.tk1{left:0;z-index:2}
 <body>
 <div class="top"><div class="bar">
   <a class="brand" href="#/"><img src="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 512 512%22 width=%22512%22 height=%22512%22%3E %3Cdefs%3E %3ClinearGradient id=%22bg%22 x1=%220%22 y1=%220%22 x2=%221%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%23141b2d%22/%3E%3Cstop offset=%221%22 stop-color=%22%230a0d14%22/%3E%3C/linearGradient%3E %3ClinearGradient id=%22ac%22 x1=%220%22 y1=%220%22 x2=%220%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%239ec1ff%22/%3E%3Cstop offset=%221%22 stop-color=%22%235b8cff%22/%3E%3C/linearGradient%3E %3ClinearGradient id=%22gr%22 x1=%220%22 y1=%220%22 x2=%220%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%235df2b0%22/%3E%3Cstop offset=%221%22 stop-color=%22%231fb97a%22/%3E%3C/linearGradient%3E %3C/defs%3E %3Crect width=%22512%22 height=%22512%22 rx=%22112%22 fill=%22url(%23bg)%22/%3E %3Crect x=%228%22 y=%228%22 width=%22496%22 height=%22496%22 rx=%22104%22 fill=%22none%22 stroke=%22%232a3552%22 stroke-width=%224%22/%3E %3C%21-- candlesticks arranged as a V --%3E %3Cg stroke-linecap=%22round%22%3E %3Cline x1=%22120%22 y1=%22118%22 x2=%22120%22 y2=%22262%22 stroke=%22%235b8cff%22 stroke-width=%2210%22/%3E%3Crect x=%2298%22 y=%22150%22 width=%2244%22 height=%2286%22 rx=%2210%22 fill=%22url(%23ac)%22/%3E %3Cline x1=%22188%22 y1=%22170%22 x2=%22188%22 y2=%22330%22 stroke=%22%235b8cff%22 stroke-width=%2210%22/%3E%3Crect x=%22166%22 y=%22198%22 width=%2244%22 height=%22100%22 rx=%2210%22 fill=%22url(%23ac)%22/%3E %3Cline x1=%22256%22 y1=%22236%22 x2=%22256%22 y2=%22398%22 stroke=%22%235b8cff%22 stroke-width=%2210%22/%3E%3Crect x=%22234%22 y=%22262%22 width=%2244%22 height=%22102%22 rx=%2210%22 fill=%22url(%23ac)%22/%3E %3Cline x1=%22324%22 y1=%22150%22 x2=%22324%22 y2=%22318%22 stroke=%22%231fb97a%22 stroke-width=%2210%22/%3E%3Crect x=%22302%22 y=%22180%22 width=%2244%22 height=%22106%22 rx=%2210%22 fill=%22url(%23gr)%22/%3E %3Cline x1=%22392%22 y1=%2280%22 x2=%22392%22 y2=%22248%22 stroke=%22%231fb97a%22 stroke-width=%2210%22/%3E%3Crect x=%22370%22 y=%22108%22 width=%2244%22 height=%22106%22 rx=%2210%22 fill=%22url(%23gr)%22/%3E %3C/g%3E %3C/svg%3E" alt=""><span>Vibe<i>Screener</i></span></a>
-  <nav class="nav"><a href="#/" id="n-home">Tokens</a><a href="#/wallets" id="n-wallets">Wallets</a><a href="#/creators" id="n-creators">Creators</a><a href="#/ask" id="n-ask">Ask</a></nav>
+  <nav class="nav"><a href="#/" id="n-home">Tokens</a><a href="#/wallets" id="n-wallets">Wallets</a><a href="#/creators" id="n-creators">Creators</a><a href="#/ask" id="n-ask">Ask</a><a href="#/vscr" id="n-vscr" hidden>$VSCR</a></nav>
   <div class="search"><input id="q" type="search" placeholder="Search token, symbol or wallet address" autocomplete="off" aria-label="Search"><div id="sres" hidden></div></div>
   <div class="right"><span id="live" class="pill">connecting</span><button class="ib" id="theme" aria-label="Switch theme">Theme</button></div>
 </div></div>
@@ -299,7 +300,7 @@ async function walletPage(addr){
  const w=await api("/api/wallet/"+addr),a=w.activity;
  const tl=p=>p?`${tokLink(p.token,p.symbol)} ${pnl(p.pnl,"")}`:"–";
  $("#app").innerHTML=`<div class="card"><h1 style="font-size:18px">Wallet <span class="num">${esc(short(w.wallet))}</span></h1>
- <div class="note" style="margin:2px 0 10px"><a href="${EXP}/address/${esc(w.wallet)}" target="_blank" rel="noopener">View on explorer</a> · <a href="#/ask" onclick="AK.q='Is ${esc(w.wallet)} a good wallet?';AK.res=null">Ask AI</a> · ${a.trades} trades indexed${a.first_ts?` · first seen ${ago(a.first_ts)}, last active ${ago(a.last_ts)}`:""}</div>
+ <div class="note" style="margin:2px 0 10px"><a href="${EXP}/address/${esc(w.wallet)}" target="_blank" rel="noopener">View on explorer</a> · <a href="#/ask" onclick="AK.q='Is ${esc(w.wallet)} a good wallet?';AK.res=null">Ask AI</a> · <a href="#/vscr" onclick="V.addr='${esc(w.wallet)}';V.rep=null">Deep report</a> · ${a.trades} trades indexed${a.first_ts?` · first seen ${ago(a.first_ts)}, last active ${ago(a.last_ts)}`:""}</div>
  ${w.stats.map(s=>`<div class="stats">
   <div class="stat"><div class="l">Estimated PnL (${esc(s.quote)})</div><div class="v">${pnl(s.pnl,s.quote)}</div></div>
   <div class="stat"><div class="l">Win rate</div><div class="v">${Math.round(s.win_rate*100)}%</div><div class="sm mut">${s.wins} of ${s.positions} positions</div></div>
@@ -327,10 +328,11 @@ function creditsHtml(){const c=AK.cfg;if(!c||!c.enabled)return"";
  :`<button class="go" ${AK.cbusy?"disabled":""} onclick="creditsIn()">${AK.cbusy?"Waiting for wallet…":"Connect wallet"}</button>
  <span class="sm mut" style="margin-left:8px">Signing is free and can't move your funds.</span>`}
  ${AK.cerr?`<div class="err sm" style="margin-top:8px" role="alert">${esc(AK.cerr)}</div>`:""}</div>`}
+const redraw=()=>/^#\/vscr/.test(location.hash)?vscrView():askView();
 async function creditsIn(){
  AK.cerr=null;
- if(!window.ethereum){AK.cerr="No browser wallet found. Open this page in a wallet browser or install a wallet extension such as MetaMask.";askView();return}
- AK.cbusy=true;askView();
+ if(!window.ethereum){AK.cerr="No browser wallet found. Open this page in a wallet browser or install a wallet extension such as MetaMask.";redraw();return}
+ AK.cbusy=true;redraw();
  try{const [w]=await window.ethereum.request({method:"eth_requestAccounts"});
   const n=await api("/api/auth/nonce?wallet="+encodeURIComponent(w));
   const hex="0x"+Array.from(new TextEncoder().encode(n.message),b=>b.toString(16).padStart(2,"0")).join("");
@@ -340,19 +342,19 @@ async function creditsIn(){
   if(!r.ok)throw new Error(j.error||"Sign-in failed");
   AK.sess=j.session;store.set("vs-session",j.session);AK.wallet=j.wallet;AK.bal=j.balance;balRefresh()}
  catch(e){AK.cerr=e&&e.code===4001?"Sign-in cancelled.":(e&&e.message)||"Sign-in failed."}
- AK.cbusy=false;askView();
+ AK.cbusy=false;redraw();
 }
-function creditsOut(){AK.sess="";AK.wallet=null;AK.bal=null;store.set("vs-session","");askView()}
+function creditsOut(){AK.sess="";AK.wallet=null;AK.bal=null;store.set("vs-session","");redraw()}
 async function creditsLoad(){
  AK.cfg=await api("/api/credits/config").catch(()=>null);
  if(AK.cfg&&AK.cfg.enabled&&AK.sess){
   try{const r=await fetch("/api/credits/balance",{headers:authH()});
-   if(r.ok){const j=await r.json();AK.wallet=j.wallet;AK.bal=j.balance;AK.dep=j.deposits}else creditsOut()}catch(e){}}}
+   if(r.ok){const j=await r.json();AK.wallet=j.wallet;AK.bal=j.balance;AK.dep=j.deposits;AK.holder=j.holder;AK.plans=j.plans}else creditsOut()}catch(e){}}}
 function depText(){return AK.dep&&AK.dep.length?"Recent deposits: "+AK.dep.map(d=>esc(d.amount)+" ("+ago(d.ts)+")").join(", "):"No deposits seen yet for this wallet."}
 async function balRefresh(){
  if(!AK.sess)return;
  try{const r=await fetch("/api/credits/balance",{headers:authH()});if(!r.ok)return;const j=await r.json();
-  AK.bal=j.balance;AK.dep=j.deposits;
+  AK.bal=j.balance;AK.dep=j.deposits;AK.holder=j.holder;AK.plans=j.plans;
   const bl=$("#bal"),dp=$("#dep");if(bl)bl.textContent=j.balance;if(dp)dp.innerHTML=depText()}catch(e){}}
 setInterval(()=>{if(location.hash==="#/ask"&&AK.wallet&&!document.hidden&&!AK.busy)balRefresh()},20000);
 function kvHtml(o){if(o==null)return"";if(typeof o!=="object")return esc(o);
@@ -397,6 +399,73 @@ $("#q").addEventListener("keydown",e=>{if(e.key==="Escape"){sClose();e.target.bl
 $("#sres").addEventListener("click",()=>{setTimeout(()=>{sClose();$("#q").value=""},0)});
 document.addEventListener("click",e=>{if(!e.target.closest(".search"))sClose()});
 
+/* ---------- $VSCR utilities ---------- */
+const V={d:null,al:null,ak:null,rep:null,key:null,code:null,bot:null,err:{},busy:{},busyAny:false,addr:"",wk:"token",wt:"",wth:"20"};
+const vErr=k=>V.err[k]?`<div class="err sm" style="margin-top:8px" role="alert">${esc(V.err[k])}</div>`:"";
+const dt=ts=>ts?new Date(ts*1000).toLocaleDateString(undefined,{year:"numeric",month:"short",day:"numeric"}):"";
+async function postJ(path,body){const r=await fetch(path,{method:"POST",headers:{"Content-Type":"application/json",...authH()},body:JSON.stringify(body||{})});return{ok:r.ok,status:r.status,j:await r.json().catch(()=>({}))}}
+async function vscrState(){
+ V.al=V.ak=null;
+ if(!AK.wallet)return;
+ const [a,k]=await Promise.all([fetch("/api/alerts/me",{headers:authH()}),fetch("/api/apikey/me",{headers:authH()})]);
+ if(a.ok)V.al=await a.json();if(k.ok)V.ak=await k.json()}
+async function vscrPage(){
+ V.d=await api("/api/vscr").catch(()=>({enabled:false}));
+ await creditsLoad();await vscrState();vscrView()}
+async function vDo(key,fn){
+ if(V.busy[key])return;V.busy[key]=true;V.busyAny=true;V.err[key]=null;vscrView();
+ try{await fn()}catch(e){V.err[key]="Couldn't reach the server. Try again."}
+ V.busy[key]=false;V.busyAny=Object.values(V.busy).some(Boolean);
+ await creditsLoad();await vscrState();vscrView()}
+const need=k=>{if(!AK.sess){V.err[k]="Connect your wallet first.";vscrView();return false}return true};
+function vReport(){if(!need("rep"))return;if(!/^0x[0-9a-fA-F]{40}$/.test(V.addr.trim())){V.err.rep="Paste a full wallet or creator address (0x…).";vscrView();return}
+ vDo("rep",async()=>{const r=await postJ("/api/report",{address:V.addr.trim()});if(r.ok)V.rep=r.j;else V.err.rep=r.j.error||"Something went wrong."})}
+function vBuy(kind){if(!need(kind))return;vDo(kind,async()=>{const r=await postJ(kind==="alerts"?"/api/alerts/buy":"/api/apikey/buy");if(!r.ok)V.err[kind]=r.j.error||"Something went wrong."})}
+function vKey(){if(!need("api"))return;vDo("api",async()=>{const r=await postJ("/api/apikey/new");if(r.ok)V.key=r.j.key;else V.err.api=r.j.error||"Something went wrong."})}
+function vLink(){if(!need("alerts"))return;vDo("alerts",async()=>{const r=await postJ("/api/alerts/link");if(r.ok){V.code=r.j.code;V.bot=r.j.bot}else V.err.alerts=r.j.error||"Something went wrong."})}
+function vWatch(){if(!need("alerts"))return;vDo("alerts",async()=>{const r=await postJ("/api/alerts/watch",{kind:V.wk,target:V.wt.trim(),threshold:V.wth});if(!r.ok)V.err.alerts=r.j.error||"Something went wrong.";else V.wt=""})}
+function vUnwatch(id){vDo("alerts",async()=>{await postJ("/api/alerts/unwatch",{id})})}
+function vscrView(){
+ const d=V.d||{};if(!d.enabled){$("#app").innerHTML=`<div class="card"><h1 style="font-size:18px">Token utilities</h1><p class="mut">Token credits aren't switched on for this site yet.</p></div>`;return}
+ const sym="$"+esc(d.symbol),P=d.prices,h=AK.holder,pl=AK.plans||{},st=d.stats||{},days=d.plan_days,B=k=>V.busy[k]?"disabled":"";
+ const act=(exp,price,k)=>exp?`<span class="up">Active until ${esc(dt(exp))}</span> · <a href="#/vscr" onclick="vBuy('${k}');return false">extend ${days} days for ${esc(price)}</a>`:`<button class="go" ${B(k)} onclick="vBuy('${k}')">${V.busy[k]?"Working…":"Buy "+days+" days for "+esc(price)+" "+sym}</button>`;
+ const al=V.al,ak=V.ak;
+ const watchHtml=al&&al.plan_expires?`<div style="margin-top:10px">
+   ${al.linked?`<div class="sm up">Telegram linked.</div>`:`<div class="sm"><b>Link Telegram:</b> ${V.code?`open ${V.bot?`<b>@${esc(V.bot)}</b>`:"the bot"} and send it this code: <b class="num">${esc(V.code)}</b> (valid 15 minutes)`:`<button class="ib" ${B("alerts")} onclick="vLink()">Get link code</button>`}</div>`}
+   <div class="filters" style="margin-top:10px"><select onchange="V.wk=this.value" aria-label="What to watch" style="background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px"><option value="token" ${V.wk==="token"?"selected":""}>Token</option><option value="wallet" ${V.wk==="wallet"?"selected":""}>Wallet</option></select>
+   <input value="${esc(V.wt)}" oninput="V.wt=this.value" placeholder="0x… address" aria-label="Address" style="flex:1;min-width:200px;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit">
+   <input value="${esc(V.wth)}" oninput="V.wth=this.value" inputmode="numeric" aria-label="Alert when the 1h price moves by this percent" title="Tokens: alert when the 1h price moves by this %" style="width:70px;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit"><span class="sm mut">% (tokens)</span>
+   <button class="go" ${B("alerts")} onclick="vWatch()">Watch</button></div>
+   ${(al.watches||[]).map(w=>`<div class="rowl"><span>${w.kind==="token"?"Token":"Wallet"} <b>${esc(w.label)}</b>${w.kind==="token"?` <span class="mut sm">±${esc(w.threshold)}% in 1h</span>`:""}</span><a href="#/vscr" onclick="vUnwatch(${+w.id});return false">remove</a></div>`).join("")||`<div class="sm mut">Nothing watched yet (up to ${al.max}).</div>`}</div>`:"";
+ $("#app").innerHTML=`<div style="max-width:900px">
+ <div class="card"><h1 style="font-size:20px;margin-bottom:4px">${sym} utilities</h1>
+  <div class="sm mut">${sym} is a testnet token with no monetary value. It pays for extra features on VibeScreener. Pay with credits: connect your wallet, send ${sym} to the treasury address below from that same wallet, and the balance appears within about a minute.</div></div>
+ ${creditsHtml()}
+ <div class="card"><h2>What ${sym} does here</h2>
+  <div class="kv"><span>Ask a question (after free ones)</span><span class="num">${esc(P.ask)} ${sym}</span></div>
+  <div class="kv"><span>Deep report on a wallet or creator</span><span class="num">${esc(P.report)} ${sym}</span></div>
+  <div class="kv"><span>Telegram alerts and watchlist, ${days} days</span><span class="num">${esc(P.alerts)} ${sym}</span></div>
+  <div class="kv"><span>Data and API access (CSV exports), ${days} days</span><span class="num">${esc(P.api)} ${sym}</span></div>
+  <div class="kv"><span>Holder perk</span><span>hold ${esc(d.holder.min)}+ ${sym}: ${d.holder.free_per_day} free questions a day</span></div></div>
+ <div class="card"><h2>Holder perk</h2><div class="sm">Hold at least <b>${esc(d.holder.min)} ${sym}</b> in the wallet you sign in with and you get <b>${d.holder.free_per_day} free questions a day</b> instead of the usual allowance. Nothing is locked or spent; we only read your balance.</div>
+  ${AK.wallet&&h?`<div class="sm" style="margin-top:8px">Your balance: <b class="num">${esc(h.balance==null?"couldn't be read right now":h.balance)}</b> · ${h.holder?`<span class="up">holder perk active</span>`:`<span class="mut">not a holder yet</span>`}</div>`:`<div class="sm mut" style="margin-top:8px">Connect your wallet to see your status.</div>`}</div>
+ <div class="card"><h2>Deep report</h2><div class="sm mut" style="margin-bottom:8px">A written profile of any wallet or token creator: positions, win rate, estimated PnL, and how the tokens they launched have traded. Costs ${esc(P.report)} ${sym}; refunded automatically if the AI can't produce a trustworthy text (you still get the plain figures).</div>
+  <div class="filters"><input value="${esc(V.addr)}" oninput="V.addr=this.value" placeholder="0x… wallet or creator address" aria-label="Address" style="flex:1;min-width:220px;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit"><button class="go" ${B("rep")} onclick="vReport()">${V.busy.rep?"Writing…":"Get report"}</button></div>${vErr("rep")}
+  ${V.rep?`<div style="margin-top:10px"><div class="sm mut" style="margin-bottom:6px">${V.rep.source==="ai"?`Written by AI from the figures below. Charged ${esc(P.report)} ${sym}.`:`Plain summary of the figures${V.rep.reason==="no_key"?" (the AI isn't switched on)":V.rep.reason==="busy"?" (the free AI is rate-limited)":""}. You were not charged.`} Not financial advice.</div><div class="ans">${esc(V.rep.report)}</div><details style="margin-top:8px"><summary class="sm" style="cursor:pointer;color:var(--accent)">Show the data it used</summary><div class="sm" style="margin-top:6px">${kvHtml(V.rep.data)}</div></details></div>`:""}</div>
+ <div class="card"><h2>Telegram alerts and watchlist</h2><div class="sm mut" style="margin-bottom:8px">${d.telegram?"Watch up to 10 tokens (alert when the 1h price moves by your chosen %) or wallets (alert when they trade). Messages come from our Telegram bot, at most one per token per hour.":"Telegram alerts aren't set up on this site yet."}</div>
+  ${d.telegram?(AK.wallet?`<div>${act(pl.alerts,P.alerts,"alerts")}</div>${watchHtml}`:`<div class="sm mut">Connect your wallet first.</div>`):""}${vErr("alerts")}</div>
+ <div class="card"><h2>Data and API access</h2><div class="sm mut" style="margin-bottom:8px">The dashboard stays free. A key unlocks full-table CSV downloads of tokens, trades, wallets and creators (up to 5,000 rows each, 20 requests a minute).</div>
+  ${AK.wallet?`<div>${act(pl.api,P.api,"api")}</div>
+  ${pl.api?`<div style="margin-top:10px">${V.key?`<div class="sm"><b>Your key (shown once, copy it now):</b></div><div class="num sm" style="word-break:break-all;margin:4px 0">${esc(V.key)}</div>`:`<div class="sm mut">${ak&&ak.key_prefix?`Current key starts with ${esc(ak.key_prefix)}… `:"No key yet. "}Making a new key replaces the old one.</div>`}
+   <button class="ib" ${B("api")} onclick="vKey()" style="margin-top:6px">Generate new key</button>
+   <div class="sm mut" style="margin-top:8px">Example:</div><pre class="num sm" style="white-space:pre-wrap;word-break:break-all;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px;margin:4px 0">curl -H "Authorization: Bearer ${esc(V.key||"vsk_…")}" "${esc(location.origin)}/api/export/trades.csv?limit=1000"</pre><div class="sm mut">Datasets: tokens, trades (optional ?token=0x…), wallets, creators.</div></div>`:""}`:`<div class="sm mut">Connect your wallet first.</div>`}${vErr("api")}</div>
+ <div class="card"><h2>Where ${sym} goes</h2><div class="sm mut" style="margin-bottom:6px">Totals across all users, nothing per wallet.</div>
+  <div class="kv"><span>Deposited so far</span><span class="num">${esc(st.deposited||"0")} ${sym} from ${esc(st.depositors||0)} wallets</span></div>
+  <div class="kv"><span>Spent on features</span><span class="num">${esc(st.spent_total||"0")} ${sym}</span></div>
+  ${Object.entries(st.spent||{}).filter(([k,v])=>v!=="0").map(([k,v])=>`<div class="kv"><span class="mut">· ${esc(k)}</span><span class="num">${esc(v)}</span></div>`).join("")}
+  <div class="kv"><span>Unspent credits held</span><span class="num">${esc(st.unspent_credits||"0")} ${sym}</span></div>
+  <div class="note">Spent credits are not refunded or withdrawable. Testnet only; no monetary value.</div></div></div>`}
+
 /* ---------- router ---------- */
 async function render(){
  const h=location.hash.replace(/^#/,"")||"/",p=h.split("/");
@@ -408,14 +477,16 @@ async function render(){
   else if(p[1]==="wallets"){$("#n-wallets").classList.add("on");await walletsPage()}
   else if(p[1]==="ask"){$("#n-ask").classList.add("on");if(!AK.busy)await askPage()}
   else if(p[1]==="creators"){$("#n-creators").classList.add("on");await creatorsPage()}
+  else if(p[1]==="vscr"){$("#n-vscr").classList.add("on");if(!V.busyAny)await vscrPage()}
   else{$("#n-home").classList.add("on");await home()}
  }catch(e){$("#app").innerHTML=`<div class="card"><div class="empty">${esc(e.message==="404"||e.message==="not found"?"Nothing indexed for that address yet.":"Data isn't ready yet ("+e.message+"). It retries automatically.")}</div></div>`}
 }
 let lastHash=null;
 function loop(){clearTimeout(timer);const y=window.scrollY,same=lastHash===location.hash;lastHash=location.hash;
- render().finally(()=>{if(same)window.scrollTo(0,y);if(!/^#\/ask/.test(location.hash))timer=setTimeout(loop,8000)})}
+ render().finally(()=>{if(same)window.scrollTo(0,y);if(!/^#\/(ask|vscr)/.test(location.hash))timer=setTimeout(loop,8000)})}
 window.addEventListener("hashchange",()=>{window.scrollTo(0,0);loop()});
 let rz=null;window.addEventListener("resize",()=>{clearTimeout(rz);rz=setTimeout(drawChart,150)});
+api("/api/credits/config").then(c=>{if(c&&c.enabled){const n=$("#n-vscr");n.hidden=false;n.textContent="$"+(c.symbol||"VSCR");$(".nav").classList.add("five")}}).catch(()=>{});
 loop();
 </script>
 </body>

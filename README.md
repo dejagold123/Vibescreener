@@ -58,10 +58,18 @@ Options: `--rpc <url>` to use your own node, `--db <file>`.
 | `ASK_FREE_PER_DAY` / `ASK_GLOBAL_PER_DAY` | free questions per visitor (default 5) and for the whole site (default 40) per day |
 | `TOKEN_ADDRESS` + `TREASURY_ADDRESS` | turn on paying for extra questions with your token; both must be set |
 | `ASK_PRICE` | token cost of one paid question (default 1) |
+| `TOKEN_SYMBOL` | shown in the UI (default `VSCR`) |
+| `REPORT_PRICE` / `REPORT_GLOBAL_PER_DAY` | cost of a deep report (default 3) and the site-wide daily cap (default 60) |
+| `ALERTS_PRICE` / `API_PRICE` | cost of a 30-day alerts plan (default 5) / API plan (default 10) |
+| `PLAN_DAYS` | length of a plan in days (default 30) |
+| `HOLDER_MIN` / `HOLDER_FREE_PER_DAY` | hold at least this many tokens to get this many free questions a day (default 1000 / 15; `HOLDER_MIN=0` turns the perk off) |
+| `TELEGRAM_BOT_TOKEN` / `TELEGRAM_BOT_USERNAME` | turns on Telegram alerts (make a bot with @BotFather; the username is shown to users) |
 
 Credit settings (`TOKEN_ADDRESS`, `TREASURY_ADDRESS`, `ASK_PRICE`) are effectively final once you share the site: check them before announcing, because people will send tokens to that address.
 
 **Free-model rate limits.** OpenRouter limits free models (per minute and per day; check openrouter.ai for the current numbers, they change and are higher once the account has bought some credit). VibeScreener spends as few requests as it can: the brief runs every few hours, repeat questions are answered from a 10-minute cache, a rate-limited model is skipped for a while instead of retried, and a question the AI could not answer is not counted against the visitor. Keep `ASK_GLOBAL_PER_DAY` at or below what your provider allows.
+
+**Token utilities** (all need `TOKEN_ADDRESS` and `TREASURY_ADDRESS`; users sign in with their wallet and pay from credits): extra Ask questions, holder perk (read-only balance check, nothing locked), deep reports on a wallet or creator (refunded if the AI can't produce a checked text), Telegram alerts and a watchlist (30-day plan), and a data/API plan with a key for CSV exports (`/api/export/{tokens,trades,wallets,creators}.csv`, `Authorization: Bearer vsk_...`). The `$VSCR` page in the dashboard shows prices, the user's plans and totals of what has been deposited and spent (no per-wallet data). Spent credits are not refundable or withdrawable. Alerts need `TELEGRAM_BOT_TOKEN`; without it that card says it isn't set up.
 
 Set keys in the Railway Variables tab, never in chat or in the repo.
 

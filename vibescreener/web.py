@@ -15,7 +15,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from . import config as cfg
-from . import alerts, ask, brief, credits, deepdive, holders, meta, report
+from . import alerts, ask, brief, credits, dataexport, deepdive, holders, meta, report
 
 STATIC = os.path.join(os.path.dirname(__file__), "static")
 ADDR = re.compile(r"^0x[0-9a-fA-F]{40}$")
@@ -489,7 +489,7 @@ def route(db_path, path, query):
         if path == "/api/alerts/config":
             st = cfg.credits_settings()
             return 200, {"enabled": st["enabled"] and st["telegram"], "price": st["alerts_price"],
-                         "days": st["plan_days"], "bot": alerts._bot["name"] or None, "max": alerts.MAX_WATCHES,
+                         "days": st["plan_days"], "bot": alerts.bot_name() or None, "max": alerts.MAX_WATCHES,
                          "symbol": st["symbol"]}
         if path == "/api/auth/nonce":
             if throttled(query.get("_ip", ["unknown"])[0], limit=10):
@@ -499,6 +499,33 @@ def route(db_path, path, query):
                 return 200, {"message": credits.issue_nonce(wdb, query.get("wallet", [""])[0])}
             except credits.CreditsError as e:
                 return e.status, {"error": str(e)}
+            finally:
+                wdb.close()
+        if path == "/api/vscr":
+            st = cfg.credits_settings()
+            if not st["enabled"]:
+                return 200, {"enabled": False}
+            wdb = WriteDB(db_path)
+            try:
+                return 200, {"enabled": True, "symbol": st["symbol"], "token": st["token"], "treasury": st["treasury"],
+                             "prices": {"ask": st["price"], "report": st["report_price"], "alerts": st["alerts_price"],
+                                        "api": st["api_price"]}, "plan_days": st["plan_days"],
+                             "holder": {"min": st["holder_min"], "free_per_day": st["holder_free"]},
+                             "telegram": st["telegram"], "stats": credits.stats(wdb)}
+            finally:
+                wdb.close()
+        if path == "/api/apikey/me":
+            wdb = WriteDB(db_path)
+            try:
+                wallet = credits.wallet_for(wdb, query.get("_auth", [""])[0])
+                return (200, dataexport.info(wdb, wallet)) if wallet else (401, {"error": "Sign in with your wallet first."})
+            finally:
+                wdb.close()
+        if path == "/api/alerts/me":
+            wdb = WriteDB(db_path)
+            try:
+                wallet = credits.wallet_for(wdb, query.get("_auth", [""])[0])
+                return (200, alerts.overview(wdb, db, wallet)) if wallet else (401, {"error": "Sign in with your wallet first."})
             finally:
                 wdb.close()
         if path == "/api/credits/balance":
@@ -627,6 +654,21 @@ def post_alerts(db_path, action, body, ip, bearer=None):
         rdb.close()
 
 
+def post_apikey(db_path, action, body, ip, bearer=None):
+    if throttled(ip, limit=15):
+        return 429, {"error": "Slow down a little, then try again."}
+    wdb = WriteDB(db_path)
+    try:
+        wallet = credits.wallet_for(wdb, bearer) if bearer else None
+        if not wallet:
+            return 401, {"error": "Sign in with your wallet first."}
+        return 200, dataexport.handle(wdb, wallet, action, cfg.credits_settings())
+    except dataexport.ExportError as e:
+        return e.status, {"error": str(e)}
+    finally:
+        wdb.close()
+
+
 def post_ask(db_path, body, ip, bearer=None):
     """POST /api/ask -> (status, payload). Never raises."""
     try:
@@ -699,6 +741,9 @@ def make_handler(db_path):
             if u.path == "/api/ask":
                 status, payload = post_ask(db_path, body, ip, bearer_token(self.headers))
                 return self._send(status, json.dumps(payload).encode(), "application/json", cors=False)
+            if u.path.startswith("/api/apikey/"):
+                status, payload = post_apikey(db_path, u.path.rsplit("/", 1)[1], body, ip, bearer_token(self.headers))
+                return self._send(status, json.dumps(payload).encode(), "application/json", cors=False)
             if u.path.startswith("/api/alerts/"):
                 status, payload = post_alerts(db_path, u.path.rsplit("/", 1)[1], body, ip, bearer_token(self.headers))
                 return self._send(status, json.dumps(payload).encode(), "application/json", cors=False)
@@ -717,6 +762,10 @@ def make_handler(db_path):
                     return self._send(200, f.read(), "text/html; charset=utf-8")
             if u.path == "/health":
                 return self._send(200, b"ok", "text/plain")
+            m = re.match(r"^/api/export/([a-z]+)\.csv$", u.path)
+            if m:
+                status, body, ctype = dataexport.respond(db_path, m.group(1), parse_qs(u.query), bearer_token(self.headers))
+                return self._send(status, body, ctype, cors=False)
             if u.path.startswith("/api/"):
                 q = parse_qs(u.query)
                 q["_ip"] = [client_ip(self.headers, self.client_address[0])]

@@ -23,6 +23,12 @@ ADDR = re.compile(r"^0x[0-9a-fA-F]{40}$")
 _bot = {"name": ""}
 
 
+def bot_name():
+    """The bot's @username, from the worker once it has asked Telegram, else from TELEGRAM_BOT_USERNAME."""
+    import os
+    return _bot["name"] or cfg._clean(os.environ.get("TELEGRAM_BOT_USERNAME")).lstrip("@")
+
+
 class AlertError(Exception):
     def __init__(self, message, status=400):
         super().__init__(message)
@@ -150,7 +156,7 @@ def handle(wdb, rdb, wallet, action, data, settings=None):
         if not st["telegram"]:
             raise AlertError("Telegram alerts are not set up on this site yet.", 404)
         code, exp = new_link_code(wdb, wallet)
-        return {"code": code, "expires": exp, "bot": _bot["name"] or None}
+        return {"code": code, "expires": exp, "bot": bot_name() or None}
     if action == "watch":
         add_watch(wdb, rdb, wallet, str(data.get("kind", "")), str(data.get("target", "")), data.get("threshold"))
         return overview(wdb, rdb, wallet)
