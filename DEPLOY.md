@@ -86,3 +86,16 @@ Open that link to see the dashboard. The JSON API lives under `/api/` (for examp
   wherever the database file can be read.
 - **Public once you generate a domain.** The dashboard has no login. It shows only
   on-chain data, but anyone with the link can open it.
+
+
+## Railway sign-in domain (closes the VIBESCREENER_DOMAIN loose end)
+
+The EIP-4361 sign-in message uses `VIBESCREENER_DOMAIN`. The code default
+(`vibescreener.local`) is a local placeholder only. For the live Railway
+service, set this one variable in Railway's **Variables** tab — no code
+change is needed, and Railway redeploys automatically on merge to main:
+
+- `VIBESCREENER_DOMAIN=vibescreener-production.up.railway.app`
+
+If a custom domain is attached later, change this variable to that domain
+instead; do not edit the code default.

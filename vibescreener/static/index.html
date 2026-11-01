@@ -38,9 +38,9 @@ button{font:inherit;color:inherit}
 .pill.live{background:var(--upbg);color:var(--up)}.pill.stale{background:var(--downbg);color:var(--down)}
 .ib{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:4px 9px;cursor:pointer;color:var(--muted)}.ib:hover{color:var(--text)}
 .strip{border-bottom:1px solid var(--line);background:var(--panel)}
-.strip div{display:flex;gap:22px;padding:7px 16px;max-width:1500px;margin:0 auto;overflow-x:auto;white-space:nowrap;scrollbar-width:none}
-.strip span b{font-weight:500;color:var(--text);font-family:var(--mono)}.strip span{color:var(--muted);font-size:12.5px}
-.wrap{max-width:1500px;margin:0 auto;padding:14px 16px 28px}
+.strip div{display:flex;gap:18px;padding:8px 16px;max-width:1500px;margin:0 auto;overflow-x:auto;white-space:nowrap;scrollbar-width:none}
+.strip span b{font-weight:600;color:var(--text);font-family:var(--mono)}.strip span{color:var(--muted);font-size:12px}
+.wrap{max-width:1500px;margin:0 auto;padding:20px 16px 28px}
 .layout{display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
 @media(min-width:1000px){.layout.rail{grid-template-columns:minmax(0,1fr) 330px}}
 .card{background:linear-gradient(180deg,rgba(255,255,255,.035),transparent),var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;box-shadow:0 12px 32px rgba(0,0,0,.28)}
@@ -52,9 +52,9 @@ h1,h2{margin:0;font-family:var(--display);font-weight:600;letter-spacing:-.02em}
 .seg button.on{background:var(--panel2);color:var(--text)}.seg button:hover{color:var(--text)}
 .tbl{overflow-x:auto;border:1px solid var(--line);border-radius:14px;background:var(--panel);box-shadow:0 12px 32px rgba(0,0,0,.28)}
 table{width:100%;border-collapse:collapse;font-size:13px}
-th{position:sticky;top:0;color:var(--muted);font-weight:600;font-size:11.5px;letter-spacing:.05em;text-transform:uppercase;text-align:right;padding:10px 10px;white-space:nowrap;border-bottom:1px solid var(--line);background:var(--panel);cursor:pointer;user-select:none}
+th{position:sticky;top:0;color:var(--muted);font-weight:600;font-size:11.5px;letter-spacing:.05em;text-transform:uppercase;text-align:right;padding:12px 10px;white-space:nowrap;border-bottom:1px solid var(--line);background:var(--panel);cursor:pointer;user-select:none}
 th.l,td.l{text-align:left}th:hover{color:var(--text)}th.on{color:var(--accent)}
-td{padding:9px 10px;border-top:1px solid var(--line);text-align:right;white-space:nowrap}
+td{padding:12px 10px;border-top:1px solid var(--line);text-align:right;white-space:nowrap}
 tbody tr:first-child td{border-top:0}
 tbody tr{cursor:pointer}tbody tr:hover td{background:var(--panel2)}
 td.tk1{position:sticky;left:0;background:var(--panel);z-index:1}tbody tr:hover td.tk1{background:var(--panel2)}
@@ -81,7 +81,9 @@ th.tk1{left:0;z-index:2}
 .tabs{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 8px}
 .scroll{overflow-x:auto}
 .thead{display:flex;flex-wrap:wrap;gap:12px 18px;align-items:center;margin-bottom:12px}
-.thead .px{font-size:26px;font-weight:500}
+/* Stageshow pass (2026-11-01): hierarchy first — one focal object per page,
+   quiet strip, 12px row pitch, first content clears the toolbar rule. */
+.thead .px{font-size:32px;font-weight:600;letter-spacing:-.02em}
 .chs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;flex:1;min-width:260px;max-width:460px}
 .chs div{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:5px 8px;text-align:center}.chs small{display:block;color:var(--muted);font-size:11px}
 .tgrid{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
@@ -90,7 +92,7 @@ th.tk1{left:0;z-index:2}
 #ro{position:absolute;left:8px;top:4px;font:12px var(--mono);color:var(--muted);pointer-events:none;background:var(--panel);padding:0 4px;border-radius:4px}
 .kv{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px solid var(--line);font-size:13px}.kv:first-of-type{border-top:0}
 .kv span:first-child{color:var(--muted)}
-.brief p{margin:6px 0 4px;line-height:1.55;max-width:80ch}
+.brief p{margin:8px 0 4px;line-height:1.6;max-width:72ch;font-size:15px}.brief b{font-family:var(--display);font-size:19px;letter-spacing:-.02em}
 .brief summary{cursor:pointer;color:var(--accent);font-size:12px;margin-top:4px}
 .brief .fx{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px 18px;margin-top:8px}
 .brief .fx h3{margin:0 0 3px;font-size:12px;color:var(--muted);font-weight:500}

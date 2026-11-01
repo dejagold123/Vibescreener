@@ -25,7 +25,7 @@ cd Vibescreener
 ```
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt   # includes eth-account, needed only by tests/test_credits.py
 ```
 
 On Windows, activate with `.venv\Scripts\activate`.

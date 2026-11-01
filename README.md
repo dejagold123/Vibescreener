@@ -30,7 +30,7 @@ token launches, every buy and sell, and wallet / token / creator analytics.
 ## Run it
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 python -m unittest discover -s tests          # decoder checks against 3 real transactions
 
 # 1. verify the decoder on your own live transactions
