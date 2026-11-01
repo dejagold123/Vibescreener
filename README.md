@@ -71,6 +71,7 @@ Options: `--rpc <url>` to use your own node, `--db <file>`.
 | `BRIEF_EVERY_HOURS` | how often the market brief is regenerated (default 3) |
 | `ASK_FREE_PER_DAY` / `ASK_GLOBAL_PER_DAY` | free questions per visitor (default 5) and for the whole site (default 40) per day |
 | `TOKEN_ADDRESS` + `TREASURY_ADDRESS` | turn on paying for extra questions with your token; both must be set |
+| `REVIEW_MODE` | set to `1` for a plain read-only site: no wallet connect, no token payments, no $VSCR page. Use it while a hackathon or directory is reviewing the site |
 | `ASK_PRICE` | token cost of one paid question (default 1) |
 | `TOKEN_SYMBOL` | shown in the UI (default `VSCR`) |
 | `REPORT_PRICE` / `REPORT_GLOBAL_PER_DAY` | cost of a deep report (default 3) and the site-wide daily cap (default 60) |

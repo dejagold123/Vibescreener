@@ -11,7 +11,7 @@ from eth_account.messages import encode_defunct
 
 from test_ask import GOOD, IP
 from test_brief import Resp, Session
-from vibescreener import credits, ethsig, holders, web
+from vibescreener import config, credits, ethsig, holders, web
 from vibescreener.db import DB
 
 TOKEN = "0x" + "ab" * 20
@@ -336,3 +336,11 @@ class VscrMarketTest(unittest.TestCase):
         db = DB(path)
         self.assertEqual(web.vscr_market(web.ReadDB(path), "0x" + "55" * 20), {"indexed": False})
         self.assertEqual(web.vscr_market(web.ReadDB(path), ""), {"indexed": False})
+
+
+class ReviewModeTest(unittest.TestCase):
+    def test_review_mode_switches_credits_off(self):
+        env = {"TOKEN_ADDRESS": "0x" + "ab" * 20, "TREASURY_ADDRESS": "0x" + "cd" * 20}
+        self.assertTrue(config.credits_settings(env)["enabled"])
+        self.assertFalse(config.credits_settings({**env, "REVIEW_MODE": "1"})["enabled"])
+        self.assertTrue(config.credits_settings({**env, "REVIEW_MODE": "0"})["enabled"])

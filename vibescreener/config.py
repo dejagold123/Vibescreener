@@ -163,7 +163,10 @@ def credits_settings(env=None):
         days = 30
     symbol = re.sub(r"[^A-Za-z0-9]", "", _clean(env.get("TOKEN_SYMBOL")))[:10] or "VSCR"
     fmt = lambda d: format(d.normalize(), "f")
-    return {"enabled": bool(token and treasury), "token": token, "treasury": treasury, "symbol": symbol,
+    review = _clean(env.get("REVIEW_MODE")).lower() in ("1", "true", "yes", "on")
+    # REVIEW_MODE: a plain read-only site for hackathon/directory reviews. No wallet connect, no
+    # token payments, no treasury address, no $VSCR page.
+    return {"enabled": bool(token and treasury) and not review, "review": review, "token": token, "treasury": treasury, "symbol": symbol,
             "price": fmt(price), "price_micro": _micro(price),
             "report_price": fmt(report), "report_micro": _micro(report),
             "alerts_price": fmt(alerts), "alerts_micro": _micro(alerts),
