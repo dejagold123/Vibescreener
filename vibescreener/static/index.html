@@ -363,7 +363,7 @@ async function creditsIn(){
   const r=await fetch("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({wallet:w,signature:sig})});
   const j=await r.json().catch(()=>({}));
   if(!r.ok)throw new Error(j.error||"Sign-in failed");
-  AK.sess=j.session;store.set("vs-session",j.session);AK.wallet=j.wallet;AK.bal=j.balance;balRefresh()}
+  AK.sess=j.session;store.set("vs-session",j.session);AK.wallet=j.wallet;AK.bal=j.balance;await creditsLoad();if(/^#\/vscr/.test(location.hash))await vscrState()}
  catch(e){AK.cerr=e&&e.code===4001?"Sign-in cancelled.":(e&&e.message)||"Sign-in failed."}
  AK.cbusy=false;redraw();
 }

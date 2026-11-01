@@ -8,6 +8,17 @@ What works today: every launch and trade indexed live; token, wallet and creator
 
 > Unofficial: not run, reviewed or endorsed by vibe/vibe. Appearing or ranking here is not a review, audit or endorsement. Testnet ETH and tokens have no monetary value; never send mainnet funds to the testnet. Educational only, not financial, legal or security advice.
 
+## Screenshots
+
+These use **sample data** (a stubbed AI and RPC), so the tokens, wallets and numbers are illustrative, not live chain data. Desktop is `01`–`07`, mobile is `m-01`–`m-07`.
+
+| | |
+|---|---|
+| ![Tokens](screenshots/01-tokens.png) | ![Wallets](screenshots/02-wallets.png) |
+| ![Creators](screenshots/03-creators.png) | ![Ask](screenshots/04-ask.png) |
+| ![Token](screenshots/05-token-detail.png) | ![Wallet](screenshots/06-wallet-detail.png) |
+| ![$VSCR](screenshots/07-vscr.png) | ![Mobile](screenshots/m-01-tokens.png) |
+
 ## Indexer (on-chain only)
 
 Indexes vibe/vibe on Robinhood Chain Testnet (chain id 46630) into SQLite:
