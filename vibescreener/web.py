@@ -15,7 +15,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from . import config as cfg
-from . import ask, brief, credits, meta, report
+from . import alerts, ask, brief, credits, deepdive, holders, meta, report
 
 STATIC = os.path.join(os.path.dirname(__file__), "static")
 ADDR = re.compile(r"^0x[0-9a-fA-F]{40}$")
@@ -486,6 +486,11 @@ def route(db_path, path, query):
         if path == "/api/credits/config":
             st = cfg.credits_settings()
             return 200, {k: st[k] for k in ("enabled", "token", "treasury", "price")}
+        if path == "/api/alerts/config":
+            st = cfg.credits_settings()
+            return 200, {"enabled": st["enabled"] and st["telegram"], "price": st["alerts_price"],
+                         "days": st["plan_days"], "bot": alerts._bot["name"] or None, "max": alerts.MAX_WATCHES,
+                         "symbol": st["symbol"]}
         if path == "/api/auth/nonce":
             if throttled(query.get("_ip", ["unknown"])[0], limit=10):
                 return 429, {"error": "Slow down a little, then try again."}
@@ -503,13 +508,19 @@ def route(db_path, path, query):
                 if not wallet:
                     return 401, {"error": "Sign in with your wallet first."}
                 return 200, {"wallet": wallet, "balance": credits.tokens_text(credits.balance(wdb, wallet)),
-                             "deposits": credits.recent_deposits(wdb, wallet)}
+                             "deposits": credits.recent_deposits(wdb, wallet), "holder": holders.tier(wallet),
+                             "plans": {k: credits.plan_expires(wdb, wallet, k) for k in ("alerts", "api")}}
             finally:
                 wdb.close()
         if path == "/api/ask/quota":
             wdb = WriteDB(db_path)
             try:
-                return 200, ask.quota(wdb, query.get("_ip", ["unknown"])[0])
+                wallet = credits.wallet_for(wdb, query.get("_auth", [""])[0]) if cfg.credits_settings()["enabled"] else None
+                tier = holders.tier(wallet) if wallet else None
+                hold = {"wallet": wallet, "free": tier["free"]} if tier and tier["holder"] else None
+                out = ask.quota(wdb, query.get("_ip", ["unknown"])[0], holder=hold)
+                out["holder"] = bool(hold)
+                return 200, out
             finally:
                 wdb.close()
         if path == "/api/brief":
@@ -575,6 +586,47 @@ def post_login(db_path, body, ip):
         wdb.close()
 
 
+def post_report(db_path, body, ip, bearer=None):
+    """POST /api/report {address} -> (status, payload). Needs a signed-in wallet with credits."""
+    data = _json_body(body)
+    if data is None:
+        return 400, {"error": "Send JSON like {\"address\": \"0x...\"}."}
+    if throttled(ip, limit=6):
+        return 429, {"error": "Slow down a little, then try again."}
+    wdb, rdb = WriteDB(db_path), ReadDB(db_path)
+    try:
+        wallet = credits.wallet_for(wdb, bearer) if bearer else None
+        if not wallet:
+            return 401, {"error": "Sign in with your wallet first."}
+        return 200, deepdive.generate(wdb, rdb, str(data.get("address", "")), wallet)
+    except deepdive.ReportError as e:
+        return e.status, {"error": str(e)}
+    except sqlite3.OperationalError as e:
+        return 503, {"error": f"data not ready ({e})"}
+    finally:
+        wdb.close()
+        rdb.close()
+
+
+def post_alerts(db_path, action, body, ip, bearer=None):
+    data = _json_body(body)
+    if data is None:
+        return 400, {"error": "Send a JSON body."}
+    if throttled(ip, limit=20):
+        return 429, {"error": "Slow down a little, then try again."}
+    wdb, rdb = WriteDB(db_path), ReadDB(db_path)
+    try:
+        wallet = credits.wallet_for(wdb, bearer) if bearer else None
+        if not wallet:
+            return 401, {"error": "Sign in with your wallet first."}
+        return 200, alerts.handle(wdb, rdb, wallet, action, data)
+    except alerts.AlertError as e:
+        return e.status, {"error": str(e)}
+    finally:
+        wdb.close()
+        rdb.close()
+
+
 def post_ask(db_path, body, ip, bearer=None):
     """POST /api/ask -> (status, payload). Never raises."""
     try:
@@ -590,12 +642,15 @@ def post_ask(db_path, body, ip, bearer=None):
         st, wallet, spend = cfg.credits_settings(), None, None
         if st["enabled"] and bearer:
             wallet = credits.wallet_for(wdb, bearer)
+        hold = None
         if wallet:
-            spend = (lambda: credits.take(wdb, wallet, st["price_micro"]),
-                     lambda: credits.refund(wdb, wallet, st["price_micro"]))
+            tier = holders.tier(wallet)
+            hold = {"wallet": wallet, "free": tier["free"]} if tier["holder"] else None
+            spend = (lambda: credits.charge(wdb, wallet, st["price_micro"], "ask"),
+                     lambda: credits.refund_charge(wdb, wallet, st["price_micro"], "ask"))
         if st["enabled"] and not spend:              # signed out: no balance, but the limit message can point to credits
             spend = (lambda: False, lambda: None)
-        out = ask.answer(wdb, rdb, data.get("question"), ip, spend=spend)
+        out = ask.answer(wdb, rdb, data.get("question"), ip, spend=spend, holder=hold)
         if wallet:
             out["credits"] = {"wallet": wallet, "balance": credits.tokens_text(credits.balance(wdb, wallet))}
         return 200, out
@@ -643,6 +698,12 @@ def make_handler(db_path):
             ip = client_ip(self.headers, self.client_address[0])
             if u.path == "/api/ask":
                 status, payload = post_ask(db_path, body, ip, bearer_token(self.headers))
+                return self._send(status, json.dumps(payload).encode(), "application/json", cors=False)
+            if u.path.startswith("/api/alerts/"):
+                status, payload = post_alerts(db_path, u.path.rsplit("/", 1)[1], body, ip, bearer_token(self.headers))
+                return self._send(status, json.dumps(payload).encode(), "application/json", cors=False)
+            if u.path == "/api/report":
+                status, payload = post_report(db_path, body, ip, bearer_token(self.headers))
                 return self._send(status, json.dumps(payload).encode(), "application/json", cors=False)
             if u.path == "/api/auth/login":
                 status, payload = post_login(db_path, body, ip)

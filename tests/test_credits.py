@@ -11,7 +11,7 @@ from eth_account.messages import encode_defunct
 
 from test_ask import GOOD, IP
 from test_brief import Resp, Session
-from vibescreener import credits, ethsig, web
+from vibescreener import credits, ethsig, holders, web
 from vibescreener.db import DB
 
 TOKEN = "0x" + "ab" * 20
@@ -120,6 +120,39 @@ class BalanceTests(unittest.TestCase):
                          ["0", "0.000001", "1", "1.2345"])
 
 
+class LedgerTests(unittest.TestCase):
+    def setUp(self):
+        self.db = web.WriteDB(tmpdb())
+        self.w = "0x" + "33" * 20
+        credits.credit_deposit(self.db, "0xt", 0, self.w, 20_000_000, 1)
+
+    def test_charge_and_refund_net_out_in_the_ledger(self):
+        self.assertTrue(credits.charge(self.db, self.w, 3_000_000, "report"))
+        credits.refund_charge(self.db, self.w, 3_000_000, "report")
+        self.assertEqual(credits.balance(self.db, self.w), 20_000_000)
+        self.assertEqual(credits.stats(self.db)["spent"]["report"], "0")
+        self.assertFalse(credits.charge(self.db, self.w, 99_000_000, "report"))
+        self.assertEqual(credits.stats(self.db)["spent"]["report"], "0")
+
+    def test_plan_purchase_stacks_and_is_atomic(self):
+        e1 = credits.buy_plan(self.db, self.w, "alerts", 5_000_000, 30, now=1000)
+        self.assertEqual(e1, 1000 + 30 * 86400)
+        e2 = credits.buy_plan(self.db, self.w, "alerts", 5_000_000, 30, now=2000)
+        self.assertEqual(e2, e1 + 30 * 86400)                     # stacks on the time left
+        self.assertEqual(credits.balance(self.db, self.w), 10_000_000)
+        self.assertIsNone(credits.buy_plan(self.db, self.w, "api", 50_000_000, 30, now=2000))
+        self.assertEqual(credits.plan_expires(self.db, self.w, "api", now=2000), 0)
+        self.assertEqual(credits.balance(self.db, self.w), 10_000_000)
+        self.assertEqual(credits.plan_expires(self.db, self.w, "alerts", now=e2 + 1), 0)   # expired
+
+    def test_public_stats_have_no_wallets(self):
+        credits.charge(self.db, self.w, 1_000_000, "ask")
+        st = credits.stats(self.db)
+        self.assertEqual((st["deposited"], st["spent_total"], st["unspent_credits"], st["depositors"]),
+                         ("20", "1", "19", 1))
+        self.assertNotIn(self.w, json.dumps(st))
+
+
 class FakeExplorer:
     def __init__(self, pages):
         self.pages, self.calls = pages, []
@@ -176,8 +209,58 @@ class PollTests(unittest.TestCase):
         self.assertEqual(credits.balance(self.reader, self.a), 2_500_000)
 
 
+class FakeRpc:
+    def __init__(self, balance_raw, decimals=18, fail=False):
+        self.balance_raw, self.decimals, self.fail, self.calls = balance_raw, decimals, fail, 0
+
+    def call(self, method, params):
+        self.calls += 1
+        if self.fail:
+            raise holders.RpcError("down")
+        data = params[0]["data"]
+        return hex(self.decimals) if data == "0x313ce567" else hex(self.balance_raw)
+
+
+class HolderTests(unittest.TestCase):
+    W = "0x" + "44" * 20
+
+    def setUp(self):
+        holders._cache.clear()
+        holders._decimals.clear()
+        self.st = {**ST, "holder_min": "1000", "holder_free": 15}
+
+    def test_holder_threshold(self):
+        self.assertTrue(holders.tier(self.W, self.st, FakeRpc(1000 * 10 ** 18), now=1)["holder"])
+        holders._cache.clear()
+        t = holders.tier(self.W, self.st, FakeRpc(999 * 10 ** 18), now=1)
+        self.assertEqual((t["holder"], t["balance"]), (False, "999.00"))
+
+    def test_decimals_are_respected(self):
+        self.assertTrue(holders.tier(self.W, self.st, FakeRpc(1000 * 10 ** 6, decimals=6), now=1)["holder"])
+
+    def test_rpc_failure_means_not_a_holder_and_is_cached_briefly(self):
+        rpc = FakeRpc(10 ** 30, fail=True)
+        self.assertFalse(holders.tier(self.W, self.st, rpc, now=1)["holder"])
+        n = rpc.calls
+        holders.tier(self.W, self.st, rpc, now=5)
+        self.assertEqual(rpc.calls, n)                         # still inside the failure cooldown
+        self.assertTrue(holders.tier(self.W, self.st, FakeRpc(2000 * 10 ** 18), now=1 + holders.FAIL_TTL + 1)["holder"])
+
+    def test_zero_minimum_disables_the_perk(self):
+        st = {**self.st, "holder_min": "0"}
+        self.assertFalse(holders.tier(self.W, st, FakeRpc(10 ** 30), now=1)["holder"])
+
+    def test_disabled_credits_or_no_wallet(self):
+        self.assertFalse(holders.tier(None, self.st, FakeRpc(10 ** 30))["holder"])
+        self.assertFalse(holders.tier(self.W, {**self.st, "enabled": False}, FakeRpc(10 ** 30))["holder"])
+
+
 class EndpointTests(unittest.TestCase):
     def setUp(self):
+        p = mock.patch("vibescreener.holders.tier",
+                       return_value={"holder": False, "balance": "0.00", "min": "1000", "free": 15})
+        p.start()
+        self.addCleanup(p.stop)
         self.path = tmpdb()
         self.acct = Account.create()
         self.w = self.acct.address.lower()

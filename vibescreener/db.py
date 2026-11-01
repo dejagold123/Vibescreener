@@ -30,6 +30,13 @@ CREATE TABLE IF NOT EXISTS sessions(token_hash TEXT PRIMARY KEY, wallet TEXT, ex
 CREATE TABLE IF NOT EXISTS credits(wallet TEXT PRIMARY KEY, micro INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS deposits(
   tx TEXT, log_index INTEGER, wallet TEXT, micro INTEGER, ts INTEGER, PRIMARY KEY(tx, log_index));
+CREATE TABLE IF NOT EXISTS spends(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER, wallet TEXT, kind TEXT, micro INTEGER);
+CREATE TABLE IF NOT EXISTS plans(wallet TEXT, kind TEXT, expires INTEGER, PRIMARY KEY(wallet, kind));
+CREATE TABLE IF NOT EXISTS watches(id INTEGER PRIMARY KEY AUTOINCREMENT, wallet TEXT, kind TEXT, target TEXT,
+  threshold REAL, last_alert INTEGER DEFAULT 0, last_seen INTEGER DEFAULT 0, UNIQUE(wallet, kind, target));
+CREATE TABLE IF NOT EXISTS tg_links(wallet TEXT PRIMARY KEY, chat_id TEXT);
+CREATE TABLE IF NOT EXISTS tg_codes(code TEXT PRIMARY KEY, wallet TEXT, expires INTEGER);
+CREATE TABLE IF NOT EXISTS api_keys(hash TEXT PRIMARY KEY, wallet TEXT, prefix TEXT, expires INTEGER);
 CREATE INDEX IF NOT EXISTS trades_trader ON trades(trader);
 CREATE INDEX IF NOT EXISTS trades_token ON trades(token, block);
 CREATE INDEX IF NOT EXISTS tokens_creator ON tokens(creator);

@@ -120,19 +120,56 @@ def ask_limits(env=None):
     return (int(_float(env, "ASK_FREE_PER_DAY", 5, 0, 1000)), int(_float(env, "ASK_GLOBAL_PER_DAY", 40, 1, 100000)))
 
 
+def _dec(env, key, default, lo, hi):
+    try:
+        v = Decimal(_clean(env.get(key)) or str(default))
+        if not lo <= v <= hi:
+            raise InvalidOperation
+        return v
+    except InvalidOperation:
+        return Decimal(str(default))
+
+
+def _micro(v):
+    return max(1, int(v * 10 ** 6))
+
+
 def credits_settings(env=None):
-    """Token credits for the Ask box. Off until both TOKEN_ADDRESS and TREASURY_ADDRESS are set."""
+    """Token credits and perks. Off until both TOKEN_ADDRESS and TREASURY_ADDRESS are set."""
     env = os.environ if env is None else env
     addr = lambda k: (lambda v: v if re.fullmatch(r"0x[0-9a-f]{40}", v) else "")(_clean(env.get(k)).lower())
     token, treasury = addr("TOKEN_ADDRESS"), addr("TREASURY_ADDRESS")
+    price = _dec(env, "ASK_PRICE", 1, Decimal("0.000001"), Decimal(10 ** 9))
+    report = _dec(env, "REPORT_PRICE", 3, Decimal("0.000001"), Decimal(10 ** 9))
+    alerts = _dec(env, "ALERTS_PRICE", 5, Decimal("0.000001"), Decimal(10 ** 9))
+    api = _dec(env, "API_PRICE", 10, Decimal("0.000001"), Decimal(10 ** 9))
+    hold_min = _dec(env, "HOLDER_MIN", 1000, Decimal(0), Decimal(10 ** 15))
     try:
-        price = Decimal(_clean(env.get("ASK_PRICE")) or "1")
-        if price <= 0 or price > 10 ** 9:
-            raise InvalidOperation
-    except InvalidOperation:
-        price = Decimal(1)
-    return {"enabled": bool(token and treasury), "token": token, "treasury": treasury,
-            "price": format(price.normalize(), "f"), "price_micro": int(price * 10 ** 6) or 1}
+        hold_free = max(0, min(1000, int(_clean(env.get("HOLDER_FREE_PER_DAY")) or 15)))
+    except ValueError:
+        hold_free = 15
+    try:
+        days = max(1, min(365, int(_clean(env.get("PLAN_DAYS")) or 30)))
+    except ValueError:
+        days = 30
+    symbol = re.sub(r"[^A-Za-z0-9]", "", _clean(env.get("TOKEN_SYMBOL")))[:10] or "VSCR"
+    fmt = lambda d: format(d.normalize(), "f")
+    return {"enabled": bool(token and treasury), "token": token, "treasury": treasury, "symbol": symbol,
+            "price": fmt(price), "price_micro": _micro(price),
+            "report_price": fmt(report), "report_micro": _micro(report),
+            "alerts_price": fmt(alerts), "alerts_micro": _micro(alerts),
+            "api_price": fmt(api), "api_micro": _micro(api),
+            "plan_days": days, "holder_min": fmt(hold_min), "holder_free": hold_free,
+            "telegram": bool(_clean(env.get("TELEGRAM_BOT_TOKEN")))}
+
+
+def report_cap(env=None):
+    """Most paid reports the site will write per day (protects the AI provider's limit)."""
+    env = os.environ if env is None else env
+    try:
+        return max(0, min(10000, int(_clean(env.get("REPORT_GLOBAL_PER_DAY")) or 60)))
+    except ValueError:
+        return 60
 
 
 def web_port(env=None):

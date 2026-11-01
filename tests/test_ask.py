@@ -125,6 +125,18 @@ class AnswerTests(Base):
         self.assertEqual(len(s.calls), 1)
         ask._cache.clear()
 
+    def test_holder_gets_a_bigger_allowance_counted_per_wallet(self):
+        hold = {"wallet": "0x" + "55" * 20, "free": 4}
+        for i in range(4):
+            out = self.go(Session(Resp(200, GOOD)), holder=hold)
+        self.assertEqual((out["source"], out["quota"]["free_left"], out["quota"]["free_per_day"]), ("ai", 0, 4))
+        with self.assertRaises(ask.AskError):
+            self.go(Session(Resp(200, GOOD)), holder=hold)
+        # the same person's IP-based allowance is untouched, and another IP with the same wallet shares the count
+        self.assertEqual(self.go(Session(Resp(200, GOOD)))["quota"]["free_left"], 1)
+        with self.assertRaises(ask.AskError):
+            ask.answer(self.w, self.r, "AAA?", "198.51.100.9", session=Session(Resp(200, GOOD)), env=LIMITS, holder=hold)
+
     def test_free_allowance_is_used_before_credits(self):
         taken = []
         spend = (lambda: taken.append(1) or True, lambda: None)

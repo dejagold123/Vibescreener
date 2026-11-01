@@ -95,6 +95,60 @@ def recent_deposits(db, wallet, limit=5):
     return [{"tx": r["tx"], "amount": tokens_text(r["micro"]), "ts": r["ts"]} for r in rows]
 
 
+def charge(db, wallet, micro, kind):
+    """take() plus a ledger row, in one transaction."""
+    with db.conn:
+        cur = db.conn.execute("UPDATE credits SET micro = micro - ? WHERE wallet = ? AND micro >= ?",
+                              (micro, wallet, micro))
+        if cur.rowcount != 1:
+            return False
+        db.conn.execute("INSERT INTO spends(ts, wallet, kind, micro) VALUES (?,?,?,?)",
+                        (int(time.time()), wallet, kind, micro))
+    return True
+
+
+def refund_charge(db, wallet, micro, kind):
+    with db.conn:
+        db.conn.execute("INSERT INTO credits VALUES (?,?) ON CONFLICT(wallet) DO UPDATE SET micro = micro + ?",
+                        (wallet, micro, micro))
+        db.conn.execute("INSERT INTO spends(ts, wallet, kind, micro) VALUES (?,?,?,?)",
+                        (int(time.time()), wallet, kind, -micro))
+
+
+def buy_plan(db, wallet, kind, micro, days, now=None):
+    """Charge once and extend a plan by `days` (stacking on any time left). Returns the new expiry or None."""
+    now = int(now or time.time())
+    with db.conn:
+        cur = db.conn.execute("UPDATE credits SET micro = micro - ? WHERE wallet = ? AND micro >= ?",
+                              (micro, wallet, micro))
+        if cur.rowcount != 1:
+            return None
+        row = db.conn.execute("SELECT expires FROM plans WHERE wallet = ? AND kind = ?", (wallet, kind)).fetchone()
+        base = max(now, row[0] if row else 0)
+        expires = base + days * 86400
+        db.conn.execute("INSERT INTO plans VALUES (?,?,?) ON CONFLICT(wallet, kind) DO UPDATE SET expires = ?",
+                        (wallet, kind, expires, expires))
+        db.conn.execute("INSERT INTO spends(ts, wallet, kind, micro) VALUES (?,?,?,?)", (now, wallet, kind, micro))
+    return expires
+
+
+def plan_expires(db, wallet, kind, now=None):
+    r = db.q("SELECT expires FROM plans WHERE wallet = ? AND kind = ? AND expires >= ?",
+             (wallet, kind, int(now or time.time())))
+    return r[0]["expires"] if r else 0
+
+
+def stats(db):
+    """Totals for the public token page: nothing per-wallet."""
+    dep = db.q("SELECT COALESCE(SUM(micro),0) m, COUNT(DISTINCT wallet) w, COUNT(*) n FROM deposits")[0]
+    spent = {r["kind"]: r["m"] for r in db.q("SELECT kind, SUM(micro) m FROM spends GROUP BY kind")}
+    held = db.q("SELECT COALESCE(SUM(micro),0) m FROM credits")[0]["m"]
+    return {"deposited": tokens_text(dep["m"]), "depositors": dep["w"], "deposits": dep["n"],
+            "spent": {k: tokens_text(v) for k, v in spent.items()},
+            "spent_total": tokens_text(sum(max(0, v) for v in spent.values())),
+            "unspent_credits": tokens_text(held)}
+
+
 def take(db, wallet, micro):
     """Spend `micro` if the wallet has it. Atomic, so two simultaneous questions can't both spend one balance."""
     with db.conn:

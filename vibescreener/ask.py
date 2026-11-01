@@ -172,9 +172,16 @@ def _bump(db, key, delta, now=None):
                         "DO UPDATE SET n = MAX(0, n + ?)", (_day(now), key, max(0, delta), delta))
 
 
-def quota(db, ip, now=None, env=None):
+def wallet_key(wallet, now=None):
+    return "w:" + hashlib.sha256(f"{wallet}|{_day(now)}".encode()).hexdigest()[:16]
+
+
+def quota(db, ip, now=None, env=None, holder=None):
+    """`holder` = {"wallet": ..., "free": n}: holders are counted per wallet with a bigger allowance."""
     free, glob = cfg.ask_limits(env)
-    used = _count(db, visitor_key(ip, now), now)
+    if holder:
+        free = max(free, holder["free"])
+    used = _count(db, wallet_key(holder["wallet"], now) if holder else visitor_key(ip, now), now)
     return {"free_per_day": free, "free_left": max(0, free - used),
             "site_left": max(0, glob - _count(db, "all", now))}
 
@@ -187,11 +194,13 @@ def _cache_key(q, data):
     return hashlib.sha256((q.lower() + "\x00" + json.dumps(data, sort_keys=True)).encode()).hexdigest()
 
 
-def answer(write_db, read_db, question, ip, session=None, env=None, now=None, spend=None):
+def answer(write_db, read_db, question, ip, session=None, env=None, now=None, spend=None, holder=None):
     """Answer one question. `spend` is an optional (take, refund) pair for paid credits."""
     q = clean_question(question)
     free, glob = cfg.ask_limits(env)
     vkey = visitor_key(ip, now)
+    if holder:
+        free, vkey = max(free, holder["free"]), wallet_key(holder["wallet"], now)
     paid = False
     if _count(write_db, "all", now) >= glob:
         raise AskError("The daily question limit for the whole site has been reached. Try again tomorrow.", 429)
@@ -247,4 +256,4 @@ def answer(write_db, read_db, question, ip, session=None, env=None, now=None, sp
     if source != "ai" and reason in ("auth", "guard"):
         print(f"ask: fell back to plain data ({reason})", flush=True)
     return {"answer": text, "source": source, "about": ctx["kind"], "data": data,
-            "reason": None if source == "ai" else reason, "quota": quota(write_db, ip, now, env)}
+            "reason": None if source == "ai" else reason, "quota": quota(write_db, ip, now, env, holder)}
