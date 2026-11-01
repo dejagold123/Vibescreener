@@ -1,0 +1,5 @@
+# Test-only dependencies. Production (requirements.txt) deliberately stays
+# free of eth_account: sign-in verification uses vibescreener/ethsig.py,
+# pure Python, so deployment gains no new dependency.
+-r requirements.txt
+eth-account>=0.13
